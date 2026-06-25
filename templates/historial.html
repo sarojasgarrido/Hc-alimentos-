@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block content %}
+<h2>Historial</h2><table class="table border mt-3">
+<thead class="table-dark"><tr><th>Fecha</th><th>Pallet</th><th>Acción</th></tr></thead>
+<tbody>{% for m in movimientos %}<tr><td>{{ m[0] }}</td><td>{{ m[1] }}</td><td>{{ m[3] }}</td></tr>{% endfor %}</tbody>
+</table>{% endblock %}

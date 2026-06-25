@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block content %}
+<div class="card shadow p-4"><h3>Picking / Salida</h3><form method="POST">
+<select name="id_pallet" class="form-select mb-2">{% for p in pallets %}<option value="{{ p[0] }}">{{ p[1] }} - {{ p[2] }}</option>{% endfor %}</select>
+<select name="id_cliente" class="form-select mb-2">{% for c in clientes %}<option value="{{ c[0] }}">{{ c[1] }}</option>{% endfor %}</select>
+<textarea name="observacion" class="form-control mb-2" placeholder="Obs"></textarea>
+<button type="submit" class="btn btn-danger w-100">Confirmar</button></form></div>{% endblock %}

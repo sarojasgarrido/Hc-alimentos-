@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% block content %}
+<div class="d-flex justify-content-between mb-3"><h2>Empresas</h2><a href="/agregar_empresa" class="btn btn-success">+ Empresa</a></div>
+<table class="table table-hover border">
+    <thead class="table-dark"><tr><th>Nombre</th><th>RUT</th><th>Proveedor</th><th>Cliente</th><th>Acción</th></tr></thead>
+    <tbody>{% for e in empresas %}<tr><td>{{ e[1] }}</td><td>{{ e[2] }}</td><td>{{ "S" if e[3] else "N" }}</td><td>{{ "S" if e[4] else "N" }}</td><td><a href="/eliminar_empresa/{{ e[0] }}" class="btn btn-danger btn-sm">Eliminar</a></td></tr>{% endfor %}</tbody>
+</table>{% endblock %}
