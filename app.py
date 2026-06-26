@@ -1,3 +1,4 @@
+
 import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.security import check_password_hash
@@ -13,6 +14,9 @@ app.secret_key = "clave_secreta_super_segura"
 def get_connection():
     # Render leerá la variable DATABASE_URL de su panel de configuración
     url_db = os.environ.get("DATABASE_URL")
+    if not url_db:
+        print("ERROR CRÍTICO: La variable DATABASE_URL no está configurada en Render.")
+        raise ValueError("DATABASE_URL no encontrada en las variables de entorno.")
     return psycopg2.connect(url_db)
 
 def login_requerido(f):
@@ -49,7 +53,6 @@ def login():
         conn.close()
         
         if user:
-            print(f"DEBUG: Usuario encontrado: {user[1]}")
             if check_password_hash(user[2], clave):
                 session["usuario_id"] = user[0]
                 session["nombre"] = user[1]
@@ -183,10 +186,4 @@ def picking():
 def historial():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion FROM tbl_movimientos m JOIN tbl_pallets p ON m.id_pallet = p.id_pallet JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto ORDER BY m.fecha DESC")
-    movimientos = cursor.fetchall()
-    conn.close()
-    return render_template("historial.html", movimientos=movimientos)
-
-if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    cursor.execute("SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion FROM tbl_movimientos m JOIN tbl_pallets p ON m.id_pallet = p.id_pallet JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto ORDER BY
