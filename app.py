@@ -38,8 +38,9 @@ def dashboard():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario = request.form["usuario"]
-        clave = request.form["clave"]
+        # AQUÍ ESTÁ EL CAMBIO: .strip() elimina espacios accidentales
+        usuario = request.form["usuario"].strip()
+        clave = request.form["clave"].strip()
         
         try:
             conn = get_connection()
@@ -54,9 +55,9 @@ def login():
                     session["nombre"] = user[1]
                     return redirect(url_for("dashboard"))
                 else:
-                    return f"DEBUG: Usuario '{usuario}' encontrado, pero la clave no coincide. Hash en BD: {user[2]}"
+                    return f"DEBUG: Clave incorrecta para '{usuario}'."
             else:
-                return f"DEBUG: Usuario '{usuario}' no encontrado en la base de datos."
+                return f"DEBUG: Usuario '{usuario}' no encontrado."
         except Exception as e:
             return f"Error de conexión a BD: {str(e)}"
             
