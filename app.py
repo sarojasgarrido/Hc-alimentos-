@@ -50,19 +50,14 @@ def login():
         
         if user:
             print(f"DEBUG: Usuario encontrado: {user[1]}")
-            print(f"DEBUG: Hash en BD: {user[2]}")
-            
             if check_password_hash(user[2], clave):
-                print("DEBUG: La contraseña coincide. Acceso concedido.")
                 session["usuario_id"] = user[0]
                 session["nombre"] = user[1]
                 return redirect(url_for("dashboard"))
             else:
-                print("DEBUG: ERROR - La contraseña no coincide.")
-                return "Usuario o clave incorrectos (Error: Pass)"
+                return "Usuario o clave incorrectos"
         else:
-            print(f"DEBUG: ERROR - Usuario '{usuario}' no encontrado en BD.")
-            return "Usuario o clave incorrectos (Error: User)"
+            return "Usuario o clave incorrectos"
             
     return render_template("login.html")
 
@@ -142,4 +137,56 @@ def nuevo_pallet():
     if request.method == "POST":
         cursor.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr) VALUES (%s, %s) RETURNING id_pallet", (request.form["id_proveedor"], request.form["codigo_qr"]))
         id_pallet = cursor.fetchone()[0]
-        cursor.execute("INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_
+        cursor.execute("INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)", (id_pallet, request.form["id_producto"], request.form["cantidad"], request.form["cantidad"]))
+        cursor.execute("INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion) VALUES (%s, %s)", (id_pallet, request.form["id_ubicacion"]))
+        cursor.execute("UPDATE tbl_ubicaciones SET estado = 'Ocupada' WHERE id_ubicacion = %s", (request.form["id_ubicacion"],))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("dashboard"))
+    
+    cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+    proveedores = cursor.fetchall()
+    cursor.execute("SELECT id_producto, codigo, nombre FROM tbl_productos")
+    productos = cursor.fetchall()
+    cursor.execute("SELECT id_ubicacion, rack, nivel, posicion FROM tbl_ubicaciones WHERE estado = 'Libre'")
+    ubicaciones = cursor.fetchall()
+    conn.close()
+    return render_template("nuevo_pallet.html", proveedores=proveedores, productos=productos, ubicaciones=ubicaciones)
+
+@app.route("/picking", methods=["POST"])
+@login_requerido
+def picking_post():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente) VALUES (%s, 'Picking', %s, 'Cliente', %s)", 
+                   (request.form["id_pallet"], request.form["observacion"], request.form["id_cliente"]))
+    cursor.execute("UPDATE tbl_pallets SET estado = 'Consumido' WHERE id_pallet = %s", (request.form["id_pallet"],))
+    cursor.execute("UPDATE tbl_ubicaciones SET estado = 'Libre' WHERE id_ubicacion IN (SELECT id_ubicacion FROM tbl_pallet_ubicacion WHERE id_pallet = %s)", (request.form["id_pallet"],))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("dashboard"))
+
+@app.route("/picking")
+@login_requerido
+def picking():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT p.id_pallet, p.codigo_qr, pr.nombre, pp.cantidad FROM tbl_pallets p JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto WHERE p.estado = 'Activo'")
+    pallets = cursor.fetchall()
+    cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_cliente = TRUE")
+    clientes = cursor.fetchall()
+    conn.close()
+    return render_template("picking.html", pallets=pallets, clientes=clientes)
+
+@app.route("/historial")
+@login_requerido
+def historial():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion FROM tbl_movimientos m JOIN tbl_pallets p ON m.id_pallet = p.id_pallet JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto ORDER BY m.fecha DESC")
+    movimientos = cursor.fetchall()
+    conn.close()
+    return render_template("historial.html", movimientos=movimientos)
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
