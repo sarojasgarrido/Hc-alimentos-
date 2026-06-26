@@ -1,4 +1,3 @@
-
 import os
 from flask import Flask, render_template, request, redirect, url_for, session
 from werkzeug.security import check_password_hash
@@ -114,8 +113,8 @@ def agregar_empresa():
     if request.method == "POST":
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO tbl_empresas (nombre, rut, es_proveedor, es_cliente) VALUES (%s, %s, %s, %s)", 
-                       (request.form["nombre"], request.form["rut"], True if request.form.get("es_proveedor") else False, True if request.form.get("es_cliente") else False))
+        query = """INSERT INTO tbl_empresas (nombre, rut, es_proveedor, es_cliente) VALUES (%s, %s, %s, %s)"""
+        cursor.execute(query, (request.form["nombre"], request.form["rut"], True if request.form.get("es_proveedor") else False, True if request.form.get("es_cliente") else False))
         conn.commit()
         conn.close()
         return redirect(url_for("listar_empresas"))
@@ -138,9 +137,13 @@ def nuevo_pallet():
     conn = get_connection()
     cursor = conn.cursor()
     if request.method == "POST":
-        cursor.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr) VALUES (%s, %s) RETURNING id_pallet", (request.form["id_proveedor"], request.form["codigo_qr"]))
+        query_pallet = "INSERT INTO tbl_pallets (id_proveedor, codigo_qr) VALUES (%s, %s) RETURNING id_pallet"
+        cursor.execute(query_pallet, (request.form["id_proveedor"], request.form["codigo_qr"]))
         id_pallet = cursor.fetchone()[0]
-        cursor.execute("INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)", (id_pallet, request.form["id_producto"], request.form["cantidad"], request.form["cantidad"]))
+        
+        query_prod = "INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)"
+        cursor.execute(query_prod, (id_pallet, request.form["id_producto"], request.form["cantidad"], request.form["cantidad"]))
+        
         cursor.execute("INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion) VALUES (%s, %s)", (id_pallet, request.form["id_ubicacion"]))
         cursor.execute("UPDATE tbl_ubicaciones SET estado = 'Ocupada' WHERE id_ubicacion = %s", (request.form["id_ubicacion"],))
         conn.commit()
@@ -161,8 +164,11 @@ def nuevo_pallet():
 def picking_post():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente) VALUES (%s, 'Picking', %s, 'Cliente', %s)", 
-                   (request.form["id_pallet"], request.form["observacion"], request.form["id_cliente"]))
+    query = """
+        INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente) 
+        VALUES (%s, 'Picking', %s, 'Cliente', %s)
+    """
+    cursor.execute(query, (request.form["id_pallet"], request.form["observacion"], request.form["id_cliente"]))
     cursor.execute("UPDATE tbl_pallets SET estado = 'Consumido' WHERE id_pallet = %s", (request.form["id_pallet"],))
     cursor.execute("UPDATE tbl_ubicaciones SET estado = 'Libre' WHERE id_ubicacion IN (SELECT id_ubicacion FROM tbl_pallet_ubicacion WHERE id_pallet = %s)", (request.form["id_pallet"],))
     conn.commit()
@@ -174,7 +180,14 @@ def picking_post():
 def picking():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT p.id_pallet, p.codigo_qr, pr.nombre, pp.cantidad FROM tbl_pallets p JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto WHERE p.estado = 'Activo'")
+    query = """
+        SELECT p.id_pallet, p.codigo_qr, pr.nombre, pp.cantidad 
+        FROM tbl_pallets p 
+        JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet 
+        JOIN tbl_productos pr ON pp.id_producto = pr.id_producto 
+        WHERE p.estado = 'Activo'
+    """
+    cursor.execute(query)
     pallets = cursor.fetchall()
     cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_cliente = TRUE")
     clientes = cursor.fetchall()
@@ -186,4 +199,18 @@ def picking():
 def historial():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion FROM tbl_movimientos m JOIN tbl_pallets p ON m.id_pallet = p.id_pallet JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet JOIN tbl_productos pr ON pp.id_producto = pr.id_producto ORDER BY
+    query = """
+        SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion 
+        FROM tbl_movimientos m 
+        JOIN tbl_pallets p ON m.id_pallet = p.id_pallet 
+        JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet 
+        JOIN tbl_productos pr ON pp.id_producto = pr.id_producto 
+        ORDER BY m.fecha DESC
+    """
+    cursor.execute(query)
+    movimientos = cursor.fetchall()
+    conn.close()
+    return render_template("historial.html", movimientos=movimientos)
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
