@@ -1,6 +1,6 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 import psycopg2
 from functools import wraps
 
@@ -21,6 +21,21 @@ def login_requerido(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- RUTA DE EMERGENCIA: AUTO-REPARACIÓN DE CLAVE ---
+@app.route("/reparar_clave")
+def reparar_clave():
+    try:
+        # Genera el hash usando la librería interna del servidor
+        nueva_clave_hash = generate_password_hash("123456")
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tbl_usuarios SET clave = %s WHERE usuario = 'Admin'", (nueva_clave_hash,))
+        conn.commit()
+        conn.close()
+        return "¡Clave reparada con éxito! Ahora ve a /login"
+    except Exception as e:
+        return f"Error al reparar: {str(e)}"
+
 # --- RUTA PRINCIPAL ---
 @app.route("/")
 @login_requerido
@@ -38,7 +53,6 @@ def dashboard():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        # AQUÍ ESTÁ EL CAMBIO: .strip() elimina espacios accidentales
         usuario = request.form["usuario"].strip()
         clave = request.form["clave"].strip()
         
@@ -121,6 +135,25 @@ def nuevo_pallet():
     ubicaciones = cursor.fetchall()
     conn.close()
     return render_template("nuevo_pallet.html", proveedores=proveedores, productos=productos, ubicaciones=ubicaciones)
+
+# --- HISTORIAL ---
+@app.route("/historial")
+@login_requerido
+def historial():
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT m.fecha, p.codigo_qr, pr.nombre, m.tipo_movimiento, m.observacion 
+        FROM tbl_movimientos m 
+        JOIN tbl_pallets p ON m.id_pallet = p.id_pallet 
+        JOIN tbl_pallet_producto pp ON p.id_pallet = pp.id_pallet 
+        JOIN tbl_productos pr ON pp.id_producto = pr.id_producto 
+        ORDER BY m.fecha DESC
+    """
+    cursor.execute(query)
+    movimientos = cursor.fetchall()
+    conn.close()
+    return render_template("historial.html", movimientos=movimientos)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
