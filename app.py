@@ -21,6 +21,20 @@ def login_requerido(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# --- RUTA PRINCIPAL ---
+@app.route("/")
+@login_requerido
+def dashboard():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%%'")
+    total = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%%' AND estado = 'Ocupada'")
+    ocupadas = cursor.fetchone()[0]
+    conn.close()
+    return render_template("dashboard.html", total=total, ocupadas=ocupadas)
+
+# --- LOGIN ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -35,7 +49,6 @@ def login():
             conn.close()
             
             if user:
-                # AQUÍ ESTÁ LA MAGIA: Si falla, te mostrará el error en pantalla
                 if check_password_hash(user[2], clave):
                     session["usuario_id"] = user[0]
                     session["nombre"] = user[1]
@@ -49,5 +62,64 @@ def login():
             
     return render_template("login.html")
 
-# --- MANTEN EL RESTO DE TUS RUTAS IGUAL QUE ANTES (Dashboard, Productos, etc.) ---
-# ... (asegúrate de pegar el resto de funciones abajo tal como las tenías)
+# --- PRODUCTOS ---
+@app.route("/productos")
+@login_requerido
+def listar_productos():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_producto, codigo, nombre, unidad FROM tbl_productos WHERE activo = TRUE")
+    productos = cursor.fetchall()
+    conn.close()
+    return render_template("productos.html", productos=productos)
+
+@app.route("/agregar_producto", methods=["GET", "POST"])
+@login_requerido
+def agregar_producto():
+    if request.method == "POST":
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO tbl_productos (codigo, nombre, unidad) VALUES (%s, %s, %s)", (request.form["codigo"], request.form["nombre"], request.form["unidad"]))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("listar_productos"))
+    return render_template("agregar_producto.html")
+
+# --- EMPRESAS ---
+@app.route("/empresas")
+@login_requerido
+def listar_empresas():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_empresa, nombre, rut, es_proveedor, es_cliente FROM tbl_empresas WHERE activo = TRUE")
+    empresas = cursor.fetchall()
+    conn.close()
+    return render_template("empresas.html", empresas=empresas)
+
+# --- LOGÍSTICA ---
+@app.route("/nuevo_pallet", methods=["GET", "POST"])
+@login_requerido
+def nuevo_pallet():
+    conn = get_connection()
+    cursor = conn.cursor()
+    if request.method == "POST":
+        cursor.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr) VALUES (%s, %s) RETURNING id_pallet", (request.form["id_proveedor"], request.form["codigo_qr"]))
+        id_pallet = cursor.fetchone()[0]
+        cursor.execute("INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)", (id_pallet, request.form["id_producto"], request.form["cantidad"], request.form["cantidad"]))
+        cursor.execute("INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion) VALUES (%s, %s)", (id_pallet, request.form["id_ubicacion"]))
+        cursor.execute("UPDATE tbl_ubicaciones SET estado = 'Ocupada' WHERE id_ubicacion = %s", (request.form["id_ubicacion"],))
+        conn.commit()
+        conn.close()
+        return redirect(url_for("dashboard"))
+    
+    cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+    proveedores = cursor.fetchall()
+    cursor.execute("SELECT id_producto, codigo, nombre FROM tbl_productos")
+    productos = cursor.fetchall()
+    cursor.execute("SELECT id_ubicacion, rack, nivel, posicion FROM tbl_ubicaciones WHERE estado = 'Libre'")
+    ubicaciones = cursor.fetchall()
+    conn.close()
+    return render_template("nuevo_pallet.html", proveedores=proveedores, productos=productos, ubicaciones=ubicaciones)
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
