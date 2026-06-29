@@ -1,6 +1,50 @@
-{% extends 'base.html' %}{% block content %}
-<div class="d-flex justify-content-between mb-3"><h2>Productos</h2><a href="/agregar_producto" class="btn btn-success">+ Producto</a></div>
-<table class="table table-hover border">
-    <thead class="table-dark"><tr><th>Código</th><th>Nombre</th><th>Unidad</th><th>Acción</th></tr></thead>
-    <tbody>{% for p in productos %}<tr><td>{{ p[1] }}</td><td>{{ p[2] }}</td><td>{{ p[3] }}</td><td><a href="/eliminar_producto/{{ p[0] }}" class="btn btn-danger btn-sm">Eliminar</a></td></tr>{% endfor %}</tbody>
-</table>{% endblock %}
+{% extends "base.html" %}
+{% block titulo %}Productos{% endblock %}
+{% block contenido %}
+    <h2>Productos</h2>
+
+    {% if mensaje %}
+        <p class="mensaje">{{ mensaje }}</p>
+    {% endif %}
+
+    <div class="form-box">
+        <h3>Agregar producto</h3>
+        <form method="POST" action="{{ url_for('productos') }}">
+            <input type="text" name="codigo" placeholder="Codigo (opcional)">
+            <input type="text" name="nombre" placeholder="Nombre" required>
+            <input type="text" name="unidad" placeholder="Unidad (KG, UNIDAD, etc.)">
+            <button type="submit">Agregar</button>
+        </form>
+    </div>
+
+    <div class="scroll-box">
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Codigo</th>
+            <th>Nombre</th>
+            <th>Unidad</th>
+            <th>Activo</th>
+            {% if session.get('rol') == 'Administrador' %}
+            <th>Acciones</th>
+            {% endif %}
+        </tr>
+        {% for p in productos %}
+        <tr>
+            <td>{{ p.id_producto }}</td>
+            <td>{{ p.codigo or "-" }}</td>
+            <td>{{ p.nombre }}</td>
+            <td>{{ p.unidad or "-" }}</td>
+            <td>{{ "Si" if p.activo else "No" }}</td>
+            {% if session.get('rol') == 'Administrador' %}
+            <td>
+                <a class="accion-editar" href="{{ url_for('editar_producto', id_producto=p.id_producto) }}">Editar</a>
+                <a class="accion-eliminar" href="{{ url_for('eliminar_producto', id_producto=p.id_producto) }}"
+                   onclick="return confirm('Seguro que quieres eliminar este producto?');">Eliminar</a>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+{% endblock %}

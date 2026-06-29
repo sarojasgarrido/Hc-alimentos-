@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Consultar pallet{% endblock %}
+{% block contenido %}
+    <h2>Consultar pallet</h2>
+
+    {% if error %}
+        <p class="mensaje" style="background-color:#f8d7da; color:#721c24;">{{ error }}</p>
+    {% endif %}
+
+    <div class="form-box">
+        <p>Escanea el QR del pallet con la camara de tu celular, o ingresa el codigo manualmente:</p>
+        <form method="POST">
+            <input type="text" name="codigo_qr" placeholder="Codigo del pallet" required>
+            <button type="submit">Buscar</button>
+        </form>
+    </div>
+{% endblock %}
