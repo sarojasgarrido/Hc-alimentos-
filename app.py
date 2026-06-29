@@ -4,6 +4,7 @@ from psycopg2.extras import RealDictCursor
 import os
 from functools import wraps
 from dotenv import load_dotenv
+from werkzeug.security import check_password_hash
 
 load_dotenv()
 
@@ -11,8 +12,9 @@ app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave-secreta-super-segura")
 
 def get_connection():
-    # Retorna un cursor que permite usar dot notation (r.id_pallet) en el HTML
+    """Crea una conexión a Neon y retorna el cursor dict."""
     conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+    # Usamos RealDictCursor para que los resultados sean diccionarios (acceso por nombre de columna)
     return conn
 
 def login_requerido(f):
@@ -27,28 +29,37 @@ def login_requerido(f):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario = request.form["usuario"].strip()
-        clave = request.form["clave"].strip()
+        usuario_form = request.form["usuario"].strip()
+        clave_form = request.form["clave"].strip()
+        
         conn = get_connection()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        cur.execute("SELECT id_usuario, nombre, clave FROM tbl_usuarios WHERE usuario = %s", (usuario,))
+        cur.execute("SELECT id_usuario, nombre, clave, rol FROM tbl_usuarios WHERE usuario = %s", (usuario_form,))
         user = cur.fetchone()
         conn.close()
-        # Bypass temporal
-        if user and clave == "123456":
+        
+        # Verificación segura de contraseña
+        if user and check_password_hash(user['clave'], clave_form):
             session["usuario_id"] = user["id_usuario"]
             session["nombre"] = user["nombre"]
+            session["rol"] = user["rol"]
             return redirect(url_for("dashboard"))
-        return "Login fallido"
+        return "Login fallido. Usuario o clave incorrectos."
     return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 # --- DASHBOARD ---
 @app.route("/")
 @login_requerido
 def dashboard():
+    # Aquí iría la lógica para renderizar el dashboard
     return render_template("dashboard.html")
 
-# --- BUSCAR PALLETS (MATCH PERFECTO CON HTML) ---
+# --- BUSCAR PALLETS ---
 @app.route("/pallets/buscar", methods=["GET"])
 @login_requerido
 def buscar_pallets():
@@ -61,7 +72,7 @@ def buscar_pallets():
     factura = request.args.get("factura")
     estado = request.args.get("estado")
     
-    # Query dinámica
+    # Query dinámica adaptada a nuestro esquema
     query = """
         SELECT pa.id_pallet, pv.nombre as proveedor, pa.factura, 
                u.rack, u.nivel, u.posicion, pa.estado, pa.fecha_ingreso
@@ -89,7 +100,7 @@ def buscar_pallets():
     cur.execute(query, tuple(params))
     resultados = cur.fetchall()
     
-    # Obtener listas para filtros (alias id_proveedor/id_producto para que el HTML funcione)
+    # Obtener listas para filtros
     cur.execute("SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
     proveedores = cur.fetchall()
     
