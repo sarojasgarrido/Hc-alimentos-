@@ -13,9 +13,9 @@ from functools import wraps
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "clave-temporal-cambiar-despues")
+app.secret_key = os.getenv("SECRET_KEY", "clave-secreta-super-segura")
 
-# --- CONEXIÓN A NEON (POSTGRESQL) ---
+# --- CONEXIÓN POSTGRESQL (NEON) ---
 def get_connection():
     return psycopg2.connect(os.environ.get("DATABASE_URL"))
 
@@ -34,11 +34,11 @@ def admin_requerido(funcion):
         if "usuario_id" not in session:
             return redirect(url_for("login", next=request.path))
         if session.get("rol") != "Administrador":
-            return "Acceso restringido: solo administradores.", 403
+            return "Acceso restringido.", 403
         return funcion(*args, **kwargs)
     return envoltura
 
-# --- LOGIN (Bypass habilitado para acceso inmediato) ---
+# --- LOGIN ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     siguiente = request.args.get("next") or request.form.get("next")
@@ -59,7 +59,7 @@ def login():
         if not activo:
             return render_template("login.html", error="Usuario inactivo", next=siguiente)
         
-        # BYPASS TEMPORAL activo
+        # BYPASS TEMPORAL: Para entrar con 123456
         if clave == "123456":
             session["usuario_id"] = id_usuario
             session["nombre"] = nombre
@@ -75,7 +75,7 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# --- DASHBOARD Y LÓGICA LOGÍSTICA ---
+# --- DASHBOARD ---
 CAJAS_POR_PALLET_ESTANDAR = 96
 
 @app.route("/")
@@ -83,51 +83,73 @@ CAJAS_POR_PALLET_ESTANDAR = 96
 def dashboard():
     conn = get_connection()
     cursor = conn.cursor()
-
     cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%'")
     ubicaciones_total = cursor.fetchone()[0]
     cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%' AND estado = 'Ocupada'")
     ubicaciones_ocupadas = cursor.fetchone()[0]
-
-    # ... (El dashboard completo lo mantienes integrando la lógica de tu compañero con las conversiones SQL)
-    # Ejemplo de conversión:
-    # cursor.execute("...WHERE pp.fecha_vencimiento <= CURRENT_TIMESTAMP + INTERVAL '7 days'")
-
-    conn.close()
-    return render_template("dashboard.html")
-
-# --- PICKING CON CONVERSIÓN A POSTGRES ---
-@app.route("/picking", methods=["GET", "POST"])
-@login_requerido
-def picking():
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    if request.method == "POST":
-        accion = request.form.get("accion", "picking")
-        # Asegúrate de reemplazar TODOS los '?' por '%s' en tus queries de picking
-        # Y reemplazar TOP 1 por LIMIT 1 al final de la consulta.
-        # Ejemplo:
-        # cursor.execute("SELECT ... FROM ... WHERE ... LIMIT 1", (params,))
-        pass # Aquí insertas la lógica de tu compañero traducida
     
     conn.close()
-    return render_template("picking.html")
+    return render_template("dashboard.html", total=ubicaciones_total, ocupadas=ubicaciones_ocupadas)
 
-# --- MANTENEDORES (PRODUCTOS, EMPRESAS, ETC) ---
-@app.route("/productos", methods=["GET", "POST"])
+# --- NUEVO PALLET (Ruta corregida) ---
+@app.route("/pallets/nuevo", methods=["GET", "POST"])
 @login_requerido
-def productos():
+def nuevo_pallet():
     conn = get_connection()
     cursor = conn.cursor()
-    # Cambia '?' por '%s'
-    cursor.execute("SELECT id_producto, codigo, nombre, unidad, activo FROM tbl_productos ORDER BY nombre")
-    lista_productos = cursor.fetchall()
-    conn.close()
-    return render_template("productos.html", productos=lista_productos)
+    
+    if request.method == "POST":
+        id_proveedor = request.form["id_proveedor"]
+        codigo_qr = request.form["codigo_qr"]
+        factura = request.form.get("factura")
+        
+        cursor.execute(
+            "INSERT INTO tbl_pallets (id_proveedor, codigo_qr, factura) VALUES (%s, %s, %s) RETURNING id_pallet",
+            (id_proveedor, codigo_qr, factura)
+        )
+        id_pallet = cursor.fetchone()[0]
+        
+        # Insertar productos (ajustado a PostgreSQL)
+        ids_prod = request.form.getlist("id_producto[]")
+        cants = request.form.getlist("cantidad[]")
+        
+        for p_id, cant in zip(ids_prod, cants):
+            cursor.execute(
+                "INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)",
+                (id_pallet, p_id, cant, cant)
+            )
+            
+        conn.commit()
+        conn.close()
+        return redirect(url_for("dashboard"))
 
-# ... Copia aquí el resto de las rutas (pallets, usuarios, historial) 
-# asegurando que todas usan '%s' para parámetros y 'LIMIT 1' para top 1.
+    cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+    proveedores = cursor.fetchall()
+    cursor.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE")
+    productos = cursor.fetchall()
+    conn.close()
+    return render_template("pallet_nuevo.html", proveedores=proveedores, productos=productos)
+
+# --- OTRAS RUTAS NECESARIAS ---
+@app.route("/productos")
+@login_requerido
+def listar_productos():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id_producto, codigo, nombre, unidad FROM tbl_productos WHERE activo = TRUE")
+    productos = cursor.fetchall()
+    conn.close()
+    return render_template("productos.html", productos=productos)
+
+@app.route("/historial")
+@login_requerido
+def historial():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT fecha, tipo_movimiento, observacion FROM tbl_movimientos ORDER BY fecha DESC")
+    movimientos = cursor.fetchall()
+    conn.close()
+    return render_template("historial.html", movimientos=movimientos)
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, port=5000)
