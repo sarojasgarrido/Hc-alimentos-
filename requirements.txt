@@ -1,4 +1,5 @@
-flask
+Flask
 psycopg2-binary
 python-dotenv
 qrcode
+gunicorn
