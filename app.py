@@ -1,166 +1,114 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from werkzeug.security import check_password_hash, generate_password_hash
+from flask import Flask, render_template, request, redirect, url_for, session
 import psycopg2
+from psycopg2.extras import RealDictCursor
 import os
-import traceback
-from dotenv import load_dotenv
 from functools import wraps
+from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__, template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"))
+app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave-secreta-super-segura")
 
 def get_connection():
-    url_db = os.environ.get("DATABASE_URL")
-    if not url_db:
-        raise ValueError("DATABASE_URL no configurada.")
-    return psycopg2.connect(url_db)
+    # Retorna un cursor que permite usar dot notation (r.id_pallet) en el HTML
+    conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+    return conn
 
-def login_requerido(funcion):
-    @wraps(funcion)
-    def envoltura(*args, **kwargs):
+def login_requerido(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
         if "usuario_id" not in session:
             return redirect(url_for("login", next=request.path))
-        return funcion(*args, **kwargs)
-    return envoltura
+        return f(*args, **kwargs)
+    return decorated_function
 
 # --- LOGIN ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    siguiente = request.args.get("next") or request.form.get("next")
     if request.method == "POST":
         usuario = request.form["usuario"].strip()
         clave = request.form["clave"].strip()
         conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id_usuario, nombre, clave, rol, activo FROM tbl_usuarios WHERE usuario = %s", (usuario,))
-        fila = cursor.fetchone()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id_usuario, nombre, clave FROM tbl_usuarios WHERE usuario = %s", (usuario,))
+        user = cur.fetchone()
         conn.close()
-        
-        if fila and clave == "123456":
-            session["usuario_id"] = fila[0]
-            session["nombre"] = fila[1]
-            session["rol"] = fila[3]
-            return redirect(siguiente or url_for("dashboard"))
+        # Bypass temporal
+        if user and clave == "123456":
+            session["usuario_id"] = user["id_usuario"]
+            session["nombre"] = user["nombre"]
+            return redirect(url_for("dashboard"))
         return "Login fallido"
     return render_template("login.html")
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 # --- DASHBOARD ---
 @app.route("/")
 @login_requerido
 def dashboard():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%'")
-    total = cursor.fetchone()[0]
-    cursor.execute("SELECT COUNT(*) FROM tbl_ubicaciones WHERE rack LIKE 'R%' AND estado = 'Ocupada'")
-    ocupadas = cursor.fetchone()[0]
-    conn.close()
-    return render_template("dashboard.html", total=total, ocupadas=ocupadas)
+    return render_template("dashboard.html")
 
-# --- PALLETS ---
-@app.route("/pallets/nuevo", methods=["GET", "POST"])
-@login_requerido
-def nuevo_pallet():
-    conn = get_connection()
-    cursor = conn.cursor()
-    if request.method == "POST":
-        cursor.execute(
-            "INSERT INTO tbl_pallets (id_proveedor, codigo_qr, factura) VALUES (%s, %s, %s) RETURNING id_pallet",
-            (request.form["id_proveedor"], request.form["codigo_qr"], request.form.get("factura"))
-        )
-        id_pallet = cursor.fetchone()[0]
-        ids_prod = request.form.getlist("id_producto[]")
-        cants = request.form.getlist("cantidad[]")
-        for p_id, cant in zip(ids_prod, cants):
-            cursor.execute(
-                "INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)",
-                (id_pallet, p_id, cant, cant)
-            )
-        conn.commit()
-        conn.close()
-        return redirect(url_for("dashboard"))
-    
-    cursor.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
-    proveedores = cursor.fetchall()
-    cursor.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE")
-    productos = cursor.fetchall()
-    conn.close()
-    return render_template("pallet_nuevo.html", proveedores=proveedores, productos=productos)
-
-@app.route("/pallets/buscar")
+# --- BUSCAR PALLETS (MATCH PERFECTO CON HTML) ---
+@app.route("/pallets/buscar", methods=["GET"])
 @login_requerido
 def buscar_pallets():
-    # Nueva función para evitar el BuildError
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT pa.id_pallet, pa.factura, pa.fecha_ingreso, pa.estado, pv.nombre 
-        FROM tbl_pallets pa 
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    # Captura de filtros
+    id_prov = request.args.get("id_proveedor")
+    id_prod = request.args.get("id_producto")
+    factura = request.args.get("factura")
+    estado = request.args.get("estado")
+    
+    # Query dinámica
+    query = """
+        SELECT pa.id_pallet, pv.nombre as proveedor, pa.factura, 
+               u.rack, u.nivel, u.posicion, pa.estado, pa.fecha_ingreso
+        FROM tbl_pallets pa
         JOIN tbl_empresas pv ON pa.id_proveedor = pv.id_empresa
-        ORDER BY pa.fecha_ingreso DESC LIMIT 50
-    """)
-    resultados = cursor.fetchall()
+        LEFT JOIN tbl_pallet_ubicacion pu ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
+        LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
+        WHERE 1=1
+    """
+    params = []
+    
+    if id_prov:
+        query += " AND pa.id_proveedor = %s"
+        params.append(id_prov)
+    if id_prod:
+        query += " AND pa.id_pallet IN (SELECT id_pallet FROM tbl_pallet_producto WHERE id_producto = %s)"
+        params.append(id_prod)
+    if factura:
+        query += " AND pa.factura ILIKE %s"
+        params.append(f"%{factura}%")
+    if estado:
+        query += " AND pa.estado = %s"
+        params.append(estado)
+        
+    cur.execute(query, tuple(params))
+    resultados = cur.fetchall()
+    
+    # Obtener listas para filtros (alias id_proveedor/id_producto para que el HTML funcione)
+    cur.execute("SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+    proveedores = cur.fetchall()
+    
+    cur.execute("SELECT id_producto, nombre FROM tbl_productos")
+    productos = cur.fetchall()
+    
     conn.close()
-    return render_template("buscar_pallets.html", resultados=resultados)
+    
+    return render_template("buscar_pallets.html", 
+                           resultados=resultados, 
+                           proveedores=proveedores, 
+                           productos=productos,
+                           filtros={'id_proveedor': id_prov, 'id_producto': id_prod, 'factura': factura, 'estado': estado})
 
-@app.route("/pallets/consulta", methods=["GET", "POST"])
+# --- DETALLE ---
+@app.route("/pallets/detalle/<int:id_pallet>")
 @login_requerido
-def consulta_pallet():
-    if request.method == "POST":
-        return redirect(url_for("consulta_pallet_detalle", codigo_qr=request.form["codigo_qr"]))
-    return render_template("consulta_pallet.html")
-
-@app.route("/pallets/consulta/<codigo_qr>")
-@login_requerido
-def consulta_pallet_detalle(codigo_qr):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id_pallet FROM tbl_pallets WHERE codigo_qr = %s", (codigo_qr,))
-    pallet = cursor.fetchone()
-    if not pallet:
-        return "Pallet no encontrado", 404
-    cursor.execute("SELECT * FROM tbl_pallet_producto WHERE id_pallet = %s", (pallet[0],))
-    items = cursor.fetchall()
-    conn.close()
-    return render_template("pallet_detalle.html", pallet=pallet, items=items)
-
-# --- MANTENEDORES ---
-@app.route("/productos")
-@login_requerido
-def listar_productos():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id_producto, codigo, nombre, unidad FROM tbl_productos WHERE activo = TRUE")
-    productos = cursor.fetchall()
-    conn.close()
-    return render_template("productos.html", productos=productos)
-
-@app.route("/empresas")
-@login_requerido
-def listar_empresas():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id_empresa, nombre, rut, es_proveedor, es_cliente FROM tbl_empresas WHERE activo = TRUE")
-    empresas = cursor.fetchall()
-    conn.close()
-    return render_template("empresas.html", empresas=empresas)
-
-@app.route("/historial")
-@login_requerido
-def historial():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT fecha, tipo_movimiento, observacion FROM tbl_movimientos ORDER BY fecha DESC")
-    movimientos = cursor.fetchall()
-    conn.close()
-    return render_template("historial.html", movimientos=movimientos)
+def ver_pallet(id_pallet):
+    return f"Detalle del pallet {id_pallet}" 
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
