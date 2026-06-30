@@ -2,3 +2,5 @@ flask
 psycopg2-binary
 python-dotenv
 qrcode[pil]
+gunicorn
+werkzeug
