@@ -3,12 +3,13 @@ from werkzeug.security import check_password_hash
 from dotenv import load_dotenv
 from functools import wraps
 import os
+import json
 from db import ejecutar_query
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "clave-secreta-super-segura")
+app.secret_key = os.getenv("SECRET_KEY", "una-clave-super-secreta")
 
 def login_requerido(f):
     @wraps(f)
@@ -18,21 +19,22 @@ def login_requerido(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- LOGIN ---
+# --- AUTENTICACIÓN ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        usuario_form = request.form["usuario"].strip()
-        clave_form = request.form["clave"].strip()
-        resultados = ejecutar_query("SELECT id_usuario, nombre, clave, rol FROM tbl_usuarios WHERE usuario = %s", (usuario_form,))
-        if not resultados: return "Usuario no encontrado"
-        user = resultados[0]
-        if check_password_hash(user['clave'], clave_form):
-            session["usuario_id"] = user["id_usuario"]
-            session["nombre"] = user["nombre"]
-            session["rol"] = user["rol"]
+        usuario = request.form["usuario"].strip()
+        clave = request.form["clave"].strip()
+        
+        # Usamos ejecutar_query (que retorna diccionarios)
+        resultados = ejecutar_query("SELECT id_usuario, nombre, clave, rol FROM tbl_usuarios WHERE usuario = %s", (usuario,))
+        
+        if resultados and check_password_hash(resultados[0]['clave'], clave):
+            session["usuario_id"] = resultados[0]["id_usuario"]
+            session["nombre"] = resultados[0]["nombre"]
+            session["rol"] = resultados[0]["rol"]
             return redirect(url_for("dashboard"))
-        return "Login fallido: Clave incorrecta."
+        return "Login fallido: Usuario o clave incorrectos."
     return render_template("login.html")
 
 @app.route("/logout")
@@ -40,21 +42,26 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# --- RUTAS PRINCIPALES ---
+# --- DASHBOARD (Con valores por defecto para no romper el HTML) ---
 @app.route("/")
 @login_requerido
 def dashboard():
-    return render_template("dashboard.html")
+    # Pasamos variables vacías o 0 para que el HTML no explote si no hay datos
+    return render_template("dashboard.html",
+        porcentaje_ocupacion=0, ubicaciones_ocupadas=0, ubicaciones_total=0,
+        pallets_activos=0, pallets_parciales=0, total_entradas=0, total_salidas=0,
+        proximos_vencer=[], racks_long=[], racks_trans=[], piso=[],
+        racks_detalle_json=json.dumps({}), piso_detalle_json=json.dumps({}),
+        pct_rot={'Alta':0, 'Media':0, 'Baja':0, 'Sin':0},
+        rotacion_lista=[], entradas=[], salidas=[], 
+        fecha_desde="", fecha_hasta=""
+    )
 
-@app.route("/dashboard/detalle/<vista>")
-@login_requerido
-def detalle_panel(vista):
-    return f"Detalle de vista: {vista} (En construcción)"
-
+# --- RUTAS DE NAVEGACIÓN (Para evitar BuildError) ---
 @app.route("/pallets/nuevo")
 @login_requerido
 def nuevo_pallet():
-    return "Ingreso de Pallet (En construcción)"
+    return "Ingreso de Pallet - En construcción"
 
 @app.route("/pallets/consulta")
 @login_requerido
@@ -64,53 +71,63 @@ def consulta_pallet():
 @app.route("/pallets/buscar")
 @login_requerido
 def buscar_pallets():
-    return "Buscar Pallets (En construcción)"
+    return "Buscar Pallets - En construcción"
 
 @app.route("/picking")
 @login_requerido
 def picking():
-    return "Picking/Despacho (En construcción)"
+    return "Picking/Despacho - En construcción"
 
 @app.route("/productos")
 @login_requerido
 def productos():
-    return "Productos (En construcción)"
+    return "Productos - En construcción"
 
 @app.route("/empresas")
 @login_requerido
 def empresas():
-    return "Empresas (En construcción)"
+    return "Empresas - En construcción"
 
 @app.route("/usuarios")
 @login_requerido
 def usuarios():
-    return "Usuarios (En construcción)"
+    return "Usuarios - En construcción"
 
-# --- DETALLES Y ACCIONES ---
+# --- OTRAS RUTAS ---
 @app.route("/pallets/detalle/<int:id_pallet>")
 @login_requerido
 def ver_pallet(id_pallet):
     return f"Detalle del pallet {id_pallet}"
 
-@app.route("/pallets/descargar_qr/<int:id_pallet>")
-@login_requerido
-def descargar_qr(id_pallet):
-    return f"Descargando QR del pallet {id_pallet}"
-
-@app.route("/pallets/editar/<int:id_pallet>")
-@login_requerido
-def editar_pallet(id_pallet):
-    return f"Editando pallet {id_pallet}"
-
-@app.route("/pallets/despachar/<int:id_pallet>", methods=["POST"])
-@login_requerido
-def despachar_pallet(id_pallet):
-    return "Despachando..."
-
 @app.route("/pallets/historial/<int:id_pallet>")
 @login_requerido
 def historial_pallet(id_pallet):
     return "Historial..."
+
+@app.route("/pallets/editar/<int:id_pallet>")
+@login_requerido
+def editar_pallet(id_pallet):
+    return "Editar..."
+
+@app.route("/pallets/descargar_qr/<int:id_pallet>")
+@login_requerido
+def descargar_qr(id_pallet):
+    return "Descargando QR..."
+
+@app.route("/despachar/<int:id_pallet>", methods=["POST"])
+@login_requerido
+def despachar_pallet(id_pallet):
+    return "Despachando..."
+
+@app.route("/eliminar_empresa/<int:id_empresa>")
+@login_requerido
+def eliminar_empresa(id_empresa):
+    return "Eliminando..."
+
+@app.route("/editar_empresa/<int:id_empresa>")
+@login_requerido
+def editar_empresa(id_empresa):
+    return "Editando..."
 
 if __name__ == "__main__":
     app.run(debug=True)
