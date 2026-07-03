@@ -31,6 +31,7 @@ def admin_required(f):
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        # Nota: Aquí deberías validar contra la base de datos en un entorno real
         session['usuario'] = request.form.get('usuario')
         session['rol'] = 'Administrador'
         return redirect(url_for('dashboard'))
@@ -51,13 +52,11 @@ def dashboard():
 def usuarios():
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    
     if request.method == 'POST':
         nombre = request.form.get('nombre')
         rol = request.form.get('rol')
         cur.execute("INSERT INTO tbl_usuarios (nombre, rol) VALUES (%s, %s)", (nombre, rol))
         conn.commit()
-        flash("Usuario creado exitosamente")
         return redirect(url_for('usuarios'))
     
     cur.execute("SELECT * FROM tbl_usuarios ORDER BY id_usuario DESC")
@@ -71,11 +70,9 @@ def buscar_pallets():
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute("""
-        SELECT p.*, e.nombre as proveedor, u.rack, u.nivel, u.posicion 
+        SELECT p.*, e.nombre as proveedor 
         FROM tbl_pallets p
         LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
-        LEFT JOIN tbl_pallet_ubicacion pu ON p.id_pallet = pu.id_pallet AND pu.vigente = TRUE
-        LEFT JOIN tbl_ubicaciones u ON pu.id_ubicacion = u.id_ubicacion
     """)
     resultados = cur.fetchall()
     cur.close()
