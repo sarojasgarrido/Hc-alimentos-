@@ -4,20 +4,17 @@ from flask import Flask, render_template, request, url_for, redirect, flash, ses
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'una_clave_muy_segura_2026')
 
-# --- 1. LOGIN Y LOGOUT ---
+# --- AUTENTICACIÓN ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        usuario = request.form.get('usuario')
-        clave = request.form.get('clave')
-        # Sustituye admin/admin123 por tu validación de DB
-        if usuario == 'admin' and clave == 'admin123':
-            session['usuario'] = usuario
-            session['rol'] = 'Administrador' # Ejemplo
-            session['nombre'] = 'Admin'      # Ejemplo
+        # Implementa aquí tu lógica de validación de usuario
+        if request.form.get('usuario') == 'admin': # Ejemplo
+            session['usuario'] = 'admin'
+            session['nombre'] = 'Admin'
+            session['rol'] = 'Administrador'
             return redirect(url_for('dashboard'))
-        else:
-            flash('Usuario o contraseña incorrectos.')
+        flash('Credenciales incorrectas.')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -25,63 +22,78 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- 2. DASHBOARD ---
+# --- DASHBOARD Y MAPA ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('dashboard.html')
+    return render_template('dashboard.html') # Usa 'mapa' o 'dashboard' según tu estructura final
 
-# --- 3. GESTIÓN DE PALLETS ---
+# --- GESTIÓN DE PALLETS ---
 @app.route('/nuevo_pallet', methods=['GET', 'POST'])
 def nuevo_pallet():
-    if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('pallet_nuevo.html')
+    return render_template('nuevo_pallet.html')
 
 @app.route('/pallet_creado')
 def pallet_creado():
-    if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('pallet_creado.html')
 
 @app.route('/ver_pallet/<id_pallet>')
 def ver_pallet(id_pallet):
-    if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('pallet_detalle.html', id_pallet=id_pallet)
 
 @app.route('/editar_pallet/<id_pallet>', methods=['GET', 'POST'])
 def editar_pallet(id_pallet):
-    if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('pallet_editar.html', id_pallet=id_pallet)
 
-@app.route('/detalle_panel/<vista>')
-def detalle_panel(vista):
-    if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('detalle_panel.html', columnas=vista)
-
-# --- 4. RUTAS RESTANTES DEL MENÚ (Placeholders para evitar errores) ---
-@app.route('/consulta_pallet')
+@app.route('/consulta_pallet', methods=['GET', 'POST'])
 def consulta_pallet():
-    return "Página de Consulta Pallet en desarrollo"
+    return render_template('consulta_pallet.html')
 
 @app.route('/buscar_pallets')
 def buscar_pallets():
-    return "Página de Buscar Pallets en desarrollo"
+    return render_template('buscar_pallets.html')
 
-@app.route('/picking')
+@app.route('/historial_pallet/<id_pallet>')
+def historial_pallet(id_pallet):
+    return render_template('historial_pallet.html', id_pallet=id_pallet)
+
+@app.route('/descargar_qr/<id_pallet>')
+def descargar_qr(id_pallet):
+    return "Descarga QR"
+
+# --- PICKING Y DESPACHO ---
+@app.route('/picking', methods=['GET', 'POST'])
 def picking():
-    return "Página de Picking en desarrollo"
+    return render_template('picking.html')
 
-@app.route('/productos')
+@app.route('/resultado_picking', methods=['POST'])
+def resultado_picking():
+    return render_template('resultado_picking.html')
+
+# --- ADMINISTRACIÓN (PRODUCTOS, EMPRESAS, USUARIOS) ---
+@app.route('/productos', methods=['GET', 'POST'])
 def productos():
-    return "Página de Productos en desarrollo"
+    return render_template('productos.html')
 
-@app.route('/empresas')
+@app.route('/editar_producto/<id_producto>', methods=['GET', 'POST'])
+def editar_producto(id_producto):
+    return render_template('editar_producto.html', id_producto=id_producto)
+
+@app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
-    return "Página de Empresas en desarrollo"
+    return render_template('empresas.html')
 
-@app.route('/usuarios')
+@app.route('/editar_empresa/<id_empresa>', methods=['GET', 'POST'])
+def editar_empresa(id_empresa):
+    return render_template('empresa_editar.html', id_empresa=id_empresa)
+
+@app.route('/usuarios', methods=['GET', 'POST'])
 def usuarios():
-    return "Página de Usuarios en desarrollo"
+    return render_template('usuarios.html')
 
-# --- 5. EJECUCIÓN ---
+@app.route('/detalle_panel/<vista>')
+def detalle_panel(vista):
+    return render_template('detalle_panel.html', columnas=vista)
+
 if __name__ == '__main__':
     app.run(debug=True)
