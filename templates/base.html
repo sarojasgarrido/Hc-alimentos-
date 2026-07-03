@@ -23,266 +23,16 @@
             --verde-suave-bg: #E8F0E5;
             --verde-suave-texto: #3C6B3F;
         }
-
         * { box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', Arial, sans-serif;
-            background-color: var(--crema);
-            color: var(--carbon);
-            margin: 0;
-        }
-
-        h1, h2, h3, .marca {
-            font-family: 'Poppins', Arial, sans-serif;
-        }
-
-        header {
-            background-color: var(--rojo-marca);
-            color: white;
-            padding: 16px 32px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .marca {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-        }
-        .marca span {
-            font-style: italic;
-            font-weight: 600;
-            opacity: 0.92;
-        }
-
-        nav {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-        nav a {
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 14px;
-            padding: 8px 12px;
-            border-radius: 6px;
-            opacity: 0.92;
-        }
-        nav a:hover {
-            background-color: rgba(255,255,255,0.15);
-            opacity: 1;
-        }
-
-        .usuario-box {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            font-size: 14px;
-        }
-
-        .salir {
-            background-color: var(--terracota);
-            color: white;
-            text-decoration: none;
-            padding: 8px 14px;
-            border-radius: 6px;
-            font-weight: 500;
-            font-size: 14px;
-        }
-        .salir:hover {
-            background-color: var(--terracota-oscuro);
-        }
-
-        main {
-            padding: 32px;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-
-        h2 {
-            font-weight: 600;
-            font-size: 22px;
-            margin-bottom: 18px;
-            color: var(--carbon);
-        }
-        h3 {
-            font-weight: 600;
-            font-size: 16px;
-            color: var(--carbon);
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--crema-card);
-            margin-top: 15px;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(45,41,37,0.08);
-        }
-        th, td {
-            border-bottom: 1px solid var(--gris-borde);
-            padding: 11px 14px;
-            text-align: left;
-            font-size: 14px;
-        }
-        th {
-            background-color: var(--rojo-marca);
-            color: white;
-            font-weight: 600;
-            font-size: 12.5px;
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
-        }
-        tr:last-child td {
-            border-bottom: none;
-        }
-        tr:hover td {
-            background-color: #FBF8F2;
-        }
-
-        .form-box {
-            background: var(--crema-card);
-            padding: 24px;
-            border-radius: 12px;
-            max-width: 520px;
-            box-shadow: 0 1px 4px rgba(45,41,37,0.10);
-            border: 1px solid var(--gris-borde);
-        }
-
-        label {
-            display: block;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--gris-texto);
-            margin-bottom: 4px;
-            margin-top: 10px;
-        }
-
-        .form-box input, .form-box select {
-            width: 100%;
-            padding: 9px 10px;
-            margin-bottom: 6px;
-            box-sizing: border-box;
-            border: 1px solid var(--gris-borde);
-            border-radius: 7px;
-            font-family: 'Inter', Arial, sans-serif;
-            font-size: 14px;
-            background-color: #FFFDFA;
-        }
-        .form-box input:focus, .form-box select:focus {
-            outline: none;
-            border-color: var(--rojo-marca);
-        }
-
-        .form-box button, button {
-            padding: 10px 18px;
-            background-color: var(--rojo-marca);
-            color: white;
-            border: none;
-            border-radius: 7px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-            font-family: 'Inter', Arial, sans-serif;
-        }
-        .form-box button:hover, button:hover {
-            background-color: var(--rojo-oscuro);
-        }
-
-        .accion-editar, .accion-eliminar {
-            margin-right: 10px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 13px;
-        }
-        .accion-editar {
-            color: var(--terracota-oscuro);
-        }
-        .accion-eliminar {
-            color: var(--rojo-suave-texto);
-        }
-
-        .mensaje {
-            background-color: var(--verde-suave-bg);
-            color: var(--verde-suave-texto);
-            padding: 11px 14px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 14px;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 12.5px;
-            font-weight: 600;
-        }
-        .badge-activo { background-color: var(--verde-suave-bg); color: var(--verde-suave-texto); }
-        .badge-picking { background-color: #FCEFE2; color: var(--terracota-oscuro); }
-        .badge-consumido { background-color: #EFEAE3; color: var(--gris-texto); }
-
-        .tarjetas {
-            display: flex;
-            gap: 16px;
-            flex-wrap: wrap;
-            margin-bottom: 28px;
-        }
-        .tarjeta {
-            background: var(--crema-card);
-            border: 1px solid var(--gris-borde);
-            border-radius: 12px;
-            padding: 18px 22px;
-            flex: 1;
-            min-width: 170px;
-            box-shadow: 0 1px 4px rgba(45,41,37,0.08);
-        }
-        .tarjeta .numero {
-            font-family: 'Poppins', Arial, sans-serif;
-            font-size: 30px;
-            font-weight: 700;
-            color: var(--rojo-marca);
-            line-height: 1.1;
-        }
-        .tarjeta .etiqueta {
-            font-size: 13px;
-            color: var(--gris-texto);
-            margin-top: 4px;
-        }
-        .fila-vencido td {
-            background-color: #FBE9E5 !important;
-        }
-        .fila-proximo td {
-            background-color: #FCEFE2 !important;
-        }
-        .scroll-box {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid var(--gris-borde);
-            border-radius: 10px;
-            margin-top: 8px;
-        }
-        .scroll-box table {
-            margin-top: 0;
-            border-radius: 0;
-            box-shadow: none;
-            border: none;
-        }
-        .scroll-box th {
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
-
-        a {
-            color: var(--rojo-marca);
-        }
+        body { font-family: 'Inter', Arial, sans-serif; background-color: var(--crema); color: var(--carbon); margin: 0; }
+        header { background-color: var(--rojo-marca); color: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+        .marca { font-size: 20px; font-weight: 700; font-family: 'Poppins'; }
+        nav { display: flex; gap: 4px; }
+        nav a { color: white; text-decoration: none; font-weight: 500; font-size: 14px; padding: 8px 12px; border-radius: 6px; }
+        nav a:hover { background-color: rgba(255,255,255,0.15); }
+        .usuario-box { display: flex; align-items: center; gap: 12px; font-size: 14px; }
+        .salir { background-color: var(--terracota); padding: 8px 14px; border-radius: 6px; color: white; text-decoration: none; }
+        main { padding: 32px; max-width: 1100px; margin: 0 auto; }
     </style>
 </head>
 <body>
@@ -290,19 +40,15 @@
         <div class="marca">HC <span>Alimentos</span> &middot; Bodega</div>
         <nav>
             <a href="{{ url_for('dashboard') }}">Panel</a>
-            <a href="{{ url_for('nuevo_pallet') }}">Ingresar Pallet</a>
-            <a href="{{ url_for('consulta_pallet') }}">Consultar Pallet</a>
             <a href="{{ url_for('buscar_pallets') }}">Buscar Pallets</a>
-            <a href="{{ url_for('picking') }}">Picking / Despacho</a>
-            <a href="{{ url_for('productos') }}">Productos</a>
-            <a href="{{ url_for('empresas') }}">Empresas</a>
+            <!-- Se eliminaron las rutas inexistentes para evitar errores 500 -->
             {% if session.get('rol') == 'Administrador' %}
             <a href="{{ url_for('usuarios') }}">Usuarios</a>
             {% endif %}
         </nav>
         <div class="usuario-box">
-            <span>{{ session.get('nombre') }} &middot; {{ session.get('rol') }}</span>
-            <a class="salir" href="{{ url_for('logout') }}">Cerrar sesion</a>
+            <span>{{ session.get('usuario') }} &middot; {{ session.get('rol') }}</span>
+            <a class="salir" href="{{ url_for('logout') }}">Cerrar sesión</a>
         </div>
     </header>
     <main>
