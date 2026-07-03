@@ -1,75 +1,67 @@
 {% extends "base.html" %}
-{% block titulo %}Usuarios{% endblock %}
+
+{% block titulo %}Gestión de Usuarios{% endblock %}
+
 {% block contenido %}
-    <h2>Usuarios</h2>
+<div class="container">
+    <h2>Gestión de Operadores</h2>
 
-    {% if mensaje %}
-        <p class="mensaje">{{ mensaje }}</p>
-    {% endif %}
-    {% if error %}
-        <p class="mensaje" style="background-color:#FBE9E5; color:#8C2E1F;">{{ error }}</p>
-    {% endif %}
-
-    <div class="form-box" style="max-width:520px;">
-        <h3>Crear nuevo operador</h3>
-        <p style="font-size:13px; color:#5C564E; margin-top:0;">
-            Solo se pueden crear usuarios con rol Operador desde aqui.
-            Para crear otro Administrador, hay que hacerlo desde el script crear_admin.py.
-        </p>
-        <form method="POST">
-            <label>Nombre completo</label>
-            <input type="text" name="nombre" required>
-
-            <label>Usuario (para iniciar sesion)</label>
-            <input type="text" name="usuario" required>
-
-            <label>Clave inicial</label>
-            <input type="password" name="clave" required>
-
-            <br><br>
-            <button type="submit">Crear operador</button>
+    <!-- Formulario de creación -->
+    <div class="card">
+        <h3>Crear nuevo usuario</h3>
+        <form method="POST" action="{{ url_for('usuarios') }}">
+            <div class="form-group">
+                <label for="nombre">Nombre:</label>
+                <input type="text" id="nombre" name="nombre" placeholder="Nombre del operador" required>
+            </div>
+            <div class="form-group">
+                <label for="rol">Rol:</label>
+                <select id="rol" name="rol" required>
+                    <option value="Operador">Operador</option>
+                    <option value="Administrador">Administrador</option>
+                </select>
+            </div>
+            <button type="submit">Crear Usuario</button>
         </form>
     </div>
 
-    <h3 style="margin-top:25px;">Usuarios existentes</h3>
-    <div class="scroll-box">
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Usuario</th>
-            <th>Rol</th>
-            <th>Activo</th>
-            <th>Acciones</th>
-        </tr>
-        {% for u in usuarios %}
-        <tr>
-            <td>{{ u.id_usuario }}</td>
-            <td>{{ u.nombre }}</td>
-            <td>{{ u.usuario }}</td>
-            <td>{{ u.rol }}</td>
-            <td>{{ "Si" if u.activo else "No" }}</td>
-            <td>
-                <a class="accion-editar" href="#"
-                   onclick="document.getElementById('form-clave-{{ u.id_usuario }}').style.display='block'; return false;">
-                    Cambiar clave
-                </a>
-                {% if u.id_usuario != session.get('usuario_id') %}
-                <a class="accion-eliminar" href="{{ url_for('desactivar_usuario', id_usuario=u.id_usuario) }}"
-                   onclick="return confirm('Cambiar estado activo de este usuario?');">
-                    {{ "Desactivar" if u.activo else "Activar" }}
-                </a>
-                {% endif %}
+    <hr style="margin: 30px 0;">
 
-                <div id="form-clave-{{ u.id_usuario }}" style="display:none; margin-top:8px;">
-                    <form method="POST" action="{{ url_for('cambiar_clave_usuario', id_usuario=u.id_usuario) }}" style="display:inline;">
-                        <input type="password" name="nueva_clave" placeholder="Nueva clave" required style="padding:4px;">
-                        <button type="submit" style="padding:4px 10px; font-size:12px;">Guardar</button>
-                    </form>
-                </div>
-            </td>
-        </tr>
-        {% endfor %}
+    <!-- Lista de usuarios existentes -->
+    <h3>Usuarios registrados</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Rol</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in usuarios %}
+            <tr>
+                <td>{{ u.id_usuario }}</td>
+                <td>{{ u.nombre }}</td>
+                <td>{{ u.rol }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="3" style="text-align: center;">No hay usuarios registrados actualmente.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
     </table>
-    </div>
+</div>
+
+<style>
+    .container { max-width: 800px; margin: auto; padding: 20px; }
+    .card { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
+    .form-group { margin-bottom: 15px; }
+    .form-group label { display: block; margin-bottom: 5px; }
+    .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th { background-color: #4B7A4E; color: white; padding: 12px; text-align: left; }
+    td { padding: 10px; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+</style>
 {% endblock %}
