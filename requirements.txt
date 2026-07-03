@@ -1,6 +1,5 @@
-flask
+Flask
 psycopg2-binary
+gunicorn
 python-dotenv
 qrcode[pil]
-gunicorn
-werkzeug
