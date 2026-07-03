@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block titulo %}Mapa de bodega{% endblock %}
+{% block contenido %}
+    <h2>Mapa de bodega</h2>
+    <p style="color:#5C564E; font-size:14px;">
+        Haz clic en cualquier rack para ver el detalle de sus 4 niveles x 3 posiciones.
+        El color indica el nivel de ocupacion.
+    </p>
+
+    <div style="display:flex; gap:18px; align-items:center; font-size:13px; margin-bottom:18px; flex-wrap:wrap;">
+        <span><span style="display:inline-block; width:14px; height:14px; background:#E8F0E5; border:1px solid #C8D8C5; vertical-align:middle;"></span> Libre</span>
+        <span><span style="display:inline-block; width:14px; height:14px; background:#FCEFE2; border:1px solid #E8C9A8; vertical-align:middle;"></span> Parcial (1-50%)</span>
+        <span><span style="display:inline-block; width:14px; height:14px; background:#F4B795; border:1px solid #D89A78; vertical-align:middle;"></span> Mayoria ocupado (51-99%)</span>
+        <span><span style="display:inline-block; width:14px; height:14px; background:#C8311F; border:1px solid #8C2E1F; vertical-align:middle;"></span> Lleno (100%)</span>
+    </div>
+
+    <!-- ESQUEMA DE LA BODEGA (referencia al layout real) -->
+    <div style="background:#FFFDFA; border:1px solid var(--gris-borde); border-radius:12px; padding:24px; box-shadow:0 1px 4px rgba(45,41,37,0.08);">
+
+        <h3 style="margin-top:0;">Racks longitudinales (R1 - R16)</h3>
+        <div style="display:grid; grid-template-columns:repeat(16, 1fr); gap:6px; margin-bottom:24px;">
+            {% for r in racks_long %}
+            <div class="rack-bloque" data-rack="{{ r.nombre }}" onclick="mostrarDetalle('{{ r.nombre }}')"
+                 style="background:{{ r.color }}; color:{{ r.color_texto }}; padding:10px 4px; text-align:center; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                {{ r.nombre }}<br>
+                <span style="font-size:10px; opacity:0.85;">{{ r.ocupadas }}/{{ r.total }}</span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div style="display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;">
+            <!-- Zona de piso -->
+            <div style="flex:3; min-width:280px;">
+                <h3 style="margin-top:0;">Zona de piso (P1 - P12)</h3>
+                <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:6px;">
+                    {% for p in piso %}
+                    <div onclick="mostrarDetallePiso('{{ p.posicion }}')"
+                         style="background:{{ p.color }}; color:{{ p.color_texto }}; padding:10px 4px; text-align:center; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                        P{{ p.posicion }}<br>
+                        <span style="font-size:10px; opacity:0.85;">{{ "Lleno" if p.ocupada else "Libre" }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Racks transversales -->
+            <div style="flex:1; min-width:140px;">
+                <h3 style="margin-top:0;">Racks transversales</h3>
+                <div style="display:grid; grid-template-columns:1fr; gap:6px;">
+                    {% for r in racks_trans %}
+                    <div class="rack-bloque" data-rack="{{ r.nombre }}" onclick="mostrarDetalle('{{ r.nombre }}')"
+                         style="background:{{ r.color }}; color:{{ r.color_texto }}; padding:10px; text-align:center; border-radius:6px; cursor:pointer; font-weight:600; font-size:12px;">
+                        {{ r.nombre }}
+                        <span style="font-size:10px; opacity:0.85; margin-left:8px;">{{ r.ocupadas }}/{{ r.total }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel de detalle (aparece al hacer clic en un rack) -->
+    <div id="detalle-rack" style="display:none; background:#FFFDFA; border:1px solid var(--gris-borde); border-radius:12px; padding:24px; margin-top:24px; box-shadow:0 1px 4px rgba(45,41,37,0.08);">
+        <h3 style="margin-top:0;" id="detalle-rack-titulo"></h3>
+        <div id="detalle-rack-contenido"></div>
+        <p style="margin-top:14px;"><a href="#" onclick="document.getElementById('detalle-rack').style.display='none'; return false;">Cerrar detalle</a></p>
+    </div>
+
+    <script>
+    const racksData = {{ racks_detalle_json|safe }};
+    const pisoData = {{ piso_detalle_json|safe }};
+
+    function mostrarDetalle(nombreRack) {
+        const data = racksData[nombreRack];
+        if (!data) return;
+        document.getElementById('detalle-rack-titulo').innerText = 'Rack ' + nombreRack;
+
+        // Construir tabla: filas = niveles N4 (arriba) -> N1 (suelo), columnas = posiciones 1-3
+        let html = '<table style="margin-top:8px;">';
+        html += '<tr><th>Nivel</th><th>Pos 1</th><th>Pos 2</th><th>Pos 3</th></tr>';
+        ['N4','N3','N2','N1'].forEach(nivel => {
+            html += '<tr><td><strong>' + nivel + '</strong></td>';
+            ['1','2','3'].forEach(pos => {
+                const celda = data.celdas[nivel][pos];
+                if (celda && celda.id_pallet) {
+                    html += '<td style="background:#FCEFE2;">' +
+                        '<a href="/pallets/detalle/' + celda.id_pallet + '">Pallet ' + celda.id_pallet + '</a><br>' +
+                        '<span style="font-size:11px; color:#5C564E;">' + celda.proveedor + '</span></td>';
+                } else {
+                    html += '<td style="background:#E8F0E5; color:#3C6B3F;">Libre</td>';
+                }
+            });
+            html += '</tr>';
+        });
+        html += '</table>';
+
+        document.getElementById('detalle-rack-contenido').innerHTML = html;
+        document.getElementById('detalle-rack').style.display = 'block';
+        document.getElementById('detalle-rack').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+
+    function mostrarDetallePiso(posicion) {
+        const data = pisoData[posicion];
+        document.getElementById('detalle-rack-titulo').innerText = 'Zona de piso - Posicion ' + posicion;
+        let html = '';
+        if (data && data.id_pallet) {
+            html = '<p>Ocupada por <a href="/pallets/detalle/' + data.id_pallet + '">Pallet ' + data.id_pallet + '</a> (' + data.proveedor + ')</p>';
+        } else {
+            html = '<p style="color:#3C6B3F;">Posicion libre.</p>';
+        }
+        document.getElementById('detalle-rack-contenido').innerHTML = html;
+        document.getElementById('detalle-rack').style.display = 'block';
+        document.getElementById('detalle-rack').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    </script>
+{% endblock %}
