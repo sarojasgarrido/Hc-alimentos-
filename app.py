@@ -1,20 +1,35 @@
 import os
-from flask import Flask, render_template, request, url_for, redirect, flash, session
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from flask import Flask, render_template, request, redirect, url_for, session, g
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'una_clave_muy_segura_2026')
 
-# --- AUTENTICACIÓN ---
+# Render proporciona DATABASE_URL automáticamente
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db():
+    if 'db' not in g:
+        g.db = psycopg2.connect(DATABASE_URL, sslmode='require')
+    return g.db
+
+@app.teardown_appcontext
+def close_db(e=None):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
+# --- RUTAS DE NAVEGACIÓN ---
+
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # Implementa aquí tu lógica de validación de usuario
-        if request.form.get('usuario') == 'admin': # Ejemplo
-            session['usuario'] = 'admin'
-            session['nombre'] = 'Admin'
-            session['rol'] = 'Administrador'
-            return redirect(url_for('dashboard'))
-        flash('Credenciales incorrectas.')
+        # Aquí validación contra tbl_usuarios
+        session['usuario'] = request.form.get('usuario')
+        session['nombre'] = 'Admin'
+        session['rol'] = 'Administrador'
+        return redirect(url_for('dashboard'))
     return render_template('login.html')
 
 @app.route('/logout')
@@ -22,22 +37,21 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD Y MAPA ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('dashboard.html') # Usa 'mapa' o 'dashboard' según tu estructura final
+    return render_template('dashboard.html')
 
-# --- GESTIÓN DE PALLETS ---
+# --- PALLETS ---
 @app.route('/nuevo_pallet', methods=['GET', 'POST'])
 def nuevo_pallet():
-    return render_template('nuevo_pallet.html')
+    return render_template('pallet_nuevo.html')
 
 @app.route('/pallet_creado')
 def pallet_creado():
     return render_template('pallet_creado.html')
 
-@app.route('/ver_pallet/<id_pallet>')
+@app.route('/pallets/detalle/<id_pallet>')
 def ver_pallet(id_pallet):
     return render_template('pallet_detalle.html', id_pallet=id_pallet)
 
@@ -45,7 +59,7 @@ def ver_pallet(id_pallet):
 def editar_pallet(id_pallet):
     return render_template('pallet_editar.html', id_pallet=id_pallet)
 
-@app.route('/consulta_pallet', methods=['GET', 'POST'])
+@app.route('/consulta_pallet')
 def consulta_pallet():
     return render_template('consulta_pallet.html')
 
@@ -55,29 +69,29 @@ def buscar_pallets():
 
 @app.route('/historial_pallet/<id_pallet>')
 def historial_pallet(id_pallet):
-    return render_template('historial_pallet.html', id_pallet=id_pallet)
+    return render_template('historial_pallet_2.html', id_pallet=id_pallet)
 
-@app.route('/descargar_qr/<id_pallet>')
-def descargar_qr(id_pallet):
-    return "Descarga QR"
-
-# --- PICKING Y DESPACHO ---
+# --- OPERACIONES ---
 @app.route('/picking', methods=['GET', 'POST'])
 def picking():
     return render_template('picking.html')
 
-@app.route('/resultado_picking', methods=['POST'])
+@app.route('/picking/resultado', methods=['POST'])
 def resultado_picking():
-    return render_template('resultado_picking.html')
+    return render_template('picking_resultado.html')
 
-# --- ADMINISTRACIÓN (PRODUCTOS, EMPRESAS, USUARIOS) ---
+@app.route('/mapa')
+def mapa():
+    return render_template('mapa.html')
+
+# --- ADMINISTRACIÓN ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     return render_template('productos.html')
 
 @app.route('/editar_producto/<id_producto>', methods=['GET', 'POST'])
 def editar_producto(id_producto):
-    return render_template('editar_producto.html', id_producto=id_producto)
+    return render_template('producto_editar.html', id_producto=id_producto)
 
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
