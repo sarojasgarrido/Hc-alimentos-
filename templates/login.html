@@ -1,116 +1,20 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HC Alimentos - Bodega</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --rojo-marca: #C8311F;
-            --rojo-oscuro: #A4291A;
-            --terracota: #C77F3D;
-            --crema: #FAF6EF;
-            --carbon: #2D2925;
-            --gris-borde: #E6DDCF;
-            --rojo-suave-bg: #FBE9E5;
-            --rojo-suave-texto: #8C2E1F;
-        }
-        * { box-sizing: border-box; }
-        body {
-            font-family: 'Inter', Arial, sans-serif;
-            background: linear-gradient(160deg, var(--rojo-marca) 0%, var(--rojo-oscuro) 55%, var(--carbon) 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .login-box {
-            background: var(--crema);
-            padding: 38px 36px;
-            border-radius: 14px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-            width: 320px;
-        }
-        .marca {
-            font-family: 'Poppins', Arial, sans-serif;
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--rojo-marca);
-            text-align: center;
-            margin-bottom: 2px;
-        }
-        .marca span {
-            font-style: italic;
-            font-weight: 600;
-            color: var(--carbon);
-        }
-        .subtitulo {
-            text-align: center;
-            font-size: 13px;
-            color: var(--carbon);
-            opacity: 0.65;
-            margin-bottom: 24px;
-        }
-        .login-box input {
-            width: 100%;
-            padding: 11px 12px;
-            margin-bottom: 14px;
-            box-sizing: border-box;
-            border: 1px solid var(--gris-borde);
-            border-radius: 8px;
-            font-family: 'Inter', Arial, sans-serif;
-            font-size: 14px;
-            background-color: #FFFDFA;
-        }
-        .login-box input:focus {
-            outline: none;
-            border-color: var(--rojo-marca);
-        }
-        .login-box button {
-            width: 100%;
-            padding: 11px;
-            background-color: var(--rojo-marca);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-        }
-        .login-box button:hover {
-            background-color: var(--rojo-oscuro);
-        }
-        .error {
-            background-color: var(--rojo-suave-bg);
-            color: var(--rojo-suave-texto);
-            text-align: center;
-            padding: 9px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 13px;
-        }
-    </style>
-</head>
-<body>
-    <div class="login-box">
-        <div class="marca">HC <span>Alimentos</span></div>
-        <div class="subtitulo">Sistema de gestion de bodega</div>
-
-        {% if error %}
-            <p class="error">{{ error }}</p>
-        {% endif %}
-
-        <form method="POST">
-            {% if next %}
-            <input type="hidden" name="next" value="{{ next }}">
-            {% endif %}
-            <input type="text" name="usuario" placeholder="Usuario" required>
-            <input type="password" name="clave" placeholder="Clave" required>
-            <button type="submit">Ingresar</button>
-        </form>
-    </div>
-</body>
-</html>
+{% extends "base.html" %}
+{% block titulo %}Acceso Bodega HC Alimentos{% endblock %}
+{% block contenido %}
+<div class="form-box" style="max-width: 400px; margin: 40px auto; text-align: center;">
+    <h2 style="color: var(--rojo-marca);">Iniciar Sesión</h2>
+    <p style="color: var(--gris-texto); font-size: 14px;">Ingrese sus credenciales de acceso</p>
+    
+    <form method="POST" action="/">
+        <div style="text-align: left;">
+            <label>Usuario</label>
+            <input type="text" name="usuario" required placeholder="Ingrese su usuario">
+            
+            <label>Contraseña</label>
+            <input type="password" name="clave" required placeholder="Ingrese su contraseña">
+        </div>
+        
+        <button type="submit" style="width: 100%; margin-top: 25px; padding: 12px; font-size: 16px;">Entrar al Sistema</button>
+    </form>
+</div>
+{% endblock %}
