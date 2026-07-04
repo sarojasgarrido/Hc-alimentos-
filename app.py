@@ -6,7 +6,6 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 app = Flask(__name__)
 app.secret_key = 'hc_alimentos_secret_2026'
 
-# Configuración de seguridad para Render
 app.config.update(
     SESSION_COOKIE_SECURE=True,
     SESSION_COOKIE_HTTPONLY=True,
@@ -17,8 +16,6 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
     return psycopg2.connect(DATABASE_URL, sslmode='require')
-
-# --- RUTAS DE ACCESO ---
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -42,33 +39,9 @@ def login():
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    
-    pallets_activos = 0
-    proximos = []
-    try:
-        cur.execute("SELECT COUNT(*) as total FROM tbl_pallets")
-        res = cur.fetchone()
-        if res: pallets_activos = res['total']
-        cur.execute("""
-            SELECT p.nombre, pp.fecha_vencimiento, 
-            (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
-            FROM tbl_pallet_producto pp
-            JOIN tbl_productos p ON pp.id_producto = p.id_producto
-            WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
-        """)
-        proximos = cur.fetchall()
-    except:
-        pass
-    cur.close()
-    conn.close()
-    return render_template('dashboard.html', pallets_activos=pallets_activos, 
-                           ocupacion=round((pallets_activos / 100.0) * 100, 1), 
-                           proximos_vencer=proximos)
+    return render_template('dashboard.html')
 
-# --- MENÚ Y NAVEGACIÓN ---
-
+# --- RUTAS QUE COINCIDEN CON TU MENÚ EN BASE.HTML ---
 @app.route('/pallet_nuevo')
 def pallet_nuevo():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -77,6 +50,18 @@ def pallet_nuevo():
 @app.route('/nuevo_pallet')
 def nuevo_pallet():
     return redirect(url_for('pallet_nuevo'))
+
+@app.route('/consulta_pallet')
+def consulta_pallet():
+    return "Pagina en construccion" # O cambia por render_template('consulta_pallet.html')
+
+@app.route('/buscar_pallets')
+def buscar_pallets():
+    return "Pagina en construccion"
+
+@app.route('/picking')
+def picking():
+    return "Pagina en construccion"
 
 @app.route('/productos')
 def productos():
@@ -87,6 +72,11 @@ def productos():
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('empresas.html')
+
+@app.route('/usuarios')
+def usuarios():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('usuarios.html')
 
 @app.route('/logout')
 def logout():
