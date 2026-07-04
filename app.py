@@ -57,8 +57,6 @@ def dashboard():
     }
     return render_template('dashboard.html', **datos_dashboard)
 
-# --- RUTAS DE GESTIÓN (Evitan Error 500) ---
-
 @app.route('/usuarios', methods=['GET', 'POST'])
 @admin_required
 def usuarios():
@@ -73,7 +71,7 @@ def usuarios():
             conn.commit()
             flash("Operador creado exitosamente")
         except Exception as e:
-            conn.rollback() # Revierte si hay error para no bloquear la BD
+            conn.rollback()
             flash(f"Error de base de datos al crear: {str(e)}")
         return redirect(url_for('usuarios'))
     
@@ -109,32 +107,81 @@ def buscar_pallets():
         cur.close()
     return render_template('buscar_pallets.html', resultados=resultados)
 
-# --- RUTAS EN CONSTRUCCIÓN (Para que el menú funcione) ---
+@app.route('/productos', methods=['GET', 'POST'])
+def productos():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    if request.method == 'POST':
+        codigo = request.form.get('codigo')
+        nombre = request.form.get('nombre')
+        unidad = request.form.get('unidad')
+        try:
+            cur.execute("INSERT INTO tbl_productos (codigo, nombre, unidad) VALUES (%s, %s, %s)", (codigo, nombre, unidad))
+            conn.commit()
+            flash("Producto registrado exitosamente.")
+        except Exception as e:
+            conn.rollback()
+            flash(f"Error al guardar producto: {str(e)}")
+        return redirect(url_for('productos'))
+
+    try:
+        cur.execute("SELECT * FROM tbl_productos ORDER BY nombre ASC")
+        lista_productos = cur.fetchall()
+    except Exception as e:
+        lista_productos = []
+        flash(f"Error cargando productos: {str(e)}")
+    finally:
+        cur.close()
+
+    return render_template('productos.html', productos=lista_productos)
+
+@app.route('/empresas', methods=['GET', 'POST'])
+def empresas():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        rut = request.form.get('rut')
+        es_proveedor = request.form.get('es_proveedor') == 'on'
+        es_cliente = request.form.get('es_cliente') == 'on'
+        try:
+            cur.execute("INSERT INTO tbl_empresas (nombre, rut, es_proveedor, es_cliente) VALUES (%s, %s, %s, %s)", (nombre, rut, es_proveedor, es_cliente))
+            conn.commit()
+            flash("Empresa registrada exitosamente.")
+        except Exception as e:
+            conn.rollback()
+            flash(f"Error al guardar empresa: {str(e)}")
+        return redirect(url_for('empresas'))
+
+    try:
+        cur.execute("SELECT * FROM tbl_empresas ORDER BY nombre ASC")
+        lista_empresas = cur.fetchall()
+    except Exception as e:
+        lista_empresas = []
+        flash(f"Error cargando empresas: {str(e)}")
+    finally:
+        cur.close()
+
+    return render_template('empresas.html', empresas=lista_empresas)
 
 @app.route('/nuevo_pallet')
 def nuevo_pallet(): 
-    flash("Módulo de Ingreso de Pallet en desarrollo.")
-    return redirect(url_for('dashboard'))
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('nuevo_pallet.html')
 
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
-    flash("Módulo de Consulta en desarrollo.")
-    return redirect(url_for('dashboard'))
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('consulta_pallet.html')
 
 @app.route('/picking')
 def picking(): 
-    flash("Módulo de Picking/Despacho en desarrollo.")
-    return redirect(url_for('dashboard'))
-
-@app.route('/productos')
-def productos(): 
-    flash("Módulo de Productos en desarrollo.")
-    return redirect(url_for('dashboard'))
-
-@app.route('/empresas')
-def empresas(): 
-    flash("Módulo de Empresas en desarrollo.")
-    return redirect(url_for('dashboard'))
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('picking.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
