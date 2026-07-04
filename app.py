@@ -168,10 +168,11 @@ def empresas():
 
     return render_template('empresas.html', empresas=lista_empresas)
 
-@app.route('/nuevo_pallet')
-def nuevo_pallet(): 
+# --- AQUI ESTA EL CAMBIO A PALLET_NUEVO ---
+@app.route('/pallet_nuevo')
+def pallet_nuevo(): 
     if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('nuevo_pallet.html')
+    return render_template('pallet_nuevo.html')
 
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
