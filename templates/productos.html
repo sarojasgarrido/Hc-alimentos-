@@ -1,50 +1,57 @@
 {% extends "base.html" %}
-{% block titulo %}Productos{% endblock %}
+{% block titulo %}Gestión de Productos{% endblock %}
 {% block contenido %}
-    <h2>Productos</h2>
+<h2>Catálogo de Productos</h2>
 
-    {% if mensaje %}
-        <p class="mensaje">{{ mensaje }}</p>
-    {% endif %}
-
-    <div class="form-box">
-        <h3>Agregar producto</h3>
+<div style="display: flex; gap: 24px; flex-wrap: wrap;">
+    <div class="form-box" style="flex: 1; min-width: 300px;">
+        <h3 style="margin-top: 0;">Agregar Producto</h3>
         <form method="POST" action="{{ url_for('productos') }}">
-            <input type="text" name="codigo" placeholder="Codigo (opcional)">
-            <input type="text" name="nombre" placeholder="Nombre" required>
-            <input type="text" name="unidad" placeholder="Unidad (KG, UNIDAD, etc.)">
-            <button type="submit">Agregar</button>
+            <label>Código SKU</label>
+            <input type="text" name="codigo" required placeholder="Ej: HC-1001">
+            
+            <label>Nombre del Producto</label>
+            <input type="text" name="nombre" required placeholder="Ej: Harina 25kg">
+            
+            <label>Unidad de Medida</label>
+            <select name="unidad" required>
+                <option value="Cajas">Cajas</option>
+                <option value="Sacos">Sacos</option>
+                <option value="Unidades">Unidades</option>
+                <option value="Kg">Kilogramos</option>
+            </select>
+            
+            <button type="submit" style="width: 100%; margin-top: 15px;">Guardar Producto</button>
         </form>
     </div>
 
-    <div class="scroll-box">
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Codigo</th>
-            <th>Nombre</th>
-            <th>Unidad</th>
-            <th>Activo</th>
-            {% if session.get('rol') == 'Administrador' %}
-            <th>Acciones</th>
-            {% endif %}
-        </tr>
-        {% for p in productos %}
-        <tr>
-            <td>{{ p.id_producto }}</td>
-            <td>{{ p.codigo or "-" }}</td>
-            <td>{{ p.nombre }}</td>
-            <td>{{ p.unidad or "-" }}</td>
-            <td>{{ "Si" if p.activo else "No" }}</td>
-            {% if session.get('rol') == 'Administrador' %}
-            <td>
-                <a class="accion-editar" href="{{ url_for('editar_producto', id_producto=p.id_producto) }}">Editar</a>
-                <a class="accion-eliminar" href="{{ url_for('eliminar_producto', id_producto=p.id_producto) }}"
-                   onclick="return confirm('Seguro que quieres eliminar este producto?');">Eliminar</a>
-            </td>
-            {% endif %}
-        </tr>
-        {% endfor %}
-    </table>
+    <div style="flex: 2; min-width: 400px;">
+        <table>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Unidad</th>
+                <th>Estado</th>
+            </tr>
+            {% for p in productos %}
+            <tr>
+                <td><strong>{{ p.codigo }}</strong></td>
+                <td>{{ p.nombre }}</td>
+                <td>{{ p.unidad }}</td>
+                <td>
+                    {% if p.activo %}
+                        <span class="badge badge-activo">Activo</span>
+                    {% else %}
+                        <span class="badge badge-consumido">Inactivo</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" style="text-align: center; color: #5C564E;">No hay productos registrados en la base de datos.</td>
+            </tr>
+            {% endfor %}
+        </table>
     </div>
+</div>
 {% endblock %}
