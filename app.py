@@ -25,7 +25,6 @@ def login():
         
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Comparación limpia
         cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s AND clave = %s", (user_in, pass_in))
         user = cur.fetchone()
         cur.close()
@@ -48,18 +47,25 @@ def dashboard():
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     
-    cur.execute("SELECT COUNT(*) as total FROM tbl_pallets")
-    res = cur.fetchone()
-    pallets_activos = res['total'] if res else 0
+    pallets_activos = 0
+    proximos = []
     
-    cur.execute("""
-        SELECT p.nombre, pp.fecha_vencimiento, 
-        (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
-        FROM tbl_pallet_producto pp
-        JOIN tbl_productos p ON pp.id_producto = p.id_producto
-        WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
-    """)
-    proximos = cur.fetchall()
+    try:
+        cur.execute("SELECT COUNT(*) as total FROM tbl_pallets")
+        res = cur.fetchone()
+        if res: pallets_activos = res['total']
+        
+        cur.execute("""
+            SELECT p.nombre, pp.fecha_vencimiento, 
+            (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
+            FROM tbl_pallet_producto pp
+            JOIN tbl_productos p ON pp.id_producto = p.id_producto
+            WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
+        """)
+        proximos = cur.fetchall()
+    except Exception as e:
+        print(f"DEBUG: Error en dashboard: {e}")
+    
     cur.close()
     conn.close()
     
