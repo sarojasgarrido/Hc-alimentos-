@@ -4,13 +4,13 @@
     <h2>Panel principal</h2>
 
     <div class="tarjetas">
-        <a href="{{ url_for('detalle_panel', vista='ocupacion') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
+        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
             <div class="tarjeta"><div class="numero">{{ porcentaje_ocupacion }}%</div><div class="etiqueta">Ocupacion bodega ({{ ubicaciones_ocupadas }}/{{ ubicaciones_total }})</div></div>
         </a>
-        <a href="{{ url_for('detalle_panel', vista='activos') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
+        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
             <div class="tarjeta"><div class="numero">{{ pallets_activos }}</div><div class="etiqueta">Pallets activos</div></div>
         </a>
-        <a href="{{ url_for('detalle_panel', vista='parciales') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
+        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
             <div class="tarjeta"><div class="numero">{{ pallets_parciales }}</div><div class="etiqueta">Stock suelto en piso</div></div>
         </a>
     </div>
@@ -21,7 +21,7 @@
         <a href="#seccion-entradas" style="text-decoration:none; flex:1; min-width:140px; display:block;">
             <div class="tarjeta"><div class="numero">{{ total_salidas }}</div><div class="etiqueta">Salidas (periodo)</div></div>
         </a>
-        <a href="{{ url_for('detalle_panel', vista='por_vencer') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
+        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
             <div class="tarjeta"><div class="numero" style="color:#D85A30;">{{ proximos_vencer|length }}</div><div class="etiqueta">Por vencer (7 dias)</div></div>
         </a>
     </div>
@@ -103,7 +103,7 @@
             html += '<tr><td><strong>' + nivel + '</strong></td>';
             ['1','2','3'].forEach(pos => {
                 const celda = data.celdas[nivel] && data.celdas[nivel][pos];
-                if (celda && celda.id_pallet) { html += '<td style="background:#FCEFE2; vertical-align:top;"><a href="/pallets/detalle/' + celda.id_pallet + '"><strong>Pallet ' + celda.id_pallet + '</strong></a><br><span style="font-size:11px; color:#5C564E;">' + (celda.proveedor || '') + '</span>' + barraLlenado(celda.cantidad, celda.capacidad, celda.pct_llenado) + '</td>';
+                if (celda && celda.id_pallet) { html += '<td style="background:#FCEFE2; vertical-align:top;"><a href="#"><strong>Pallet ' + celda.id_pallet + '</strong></a><br><span style="font-size:11px; color:#5C564E;">' + (celda.proveedor || '') + '</span>' + barraLlenado(celda.cantidad, celda.capacidad, celda.pct_llenado) + '</td>';
                 } else { html += '<td style="background:#E8F0E5; color:#3C6B3F; text-align:center;">Libre</td>'; }
             }); html += '</tr>';
         }); html += '</table>';
@@ -118,7 +118,7 @@
         if (data && data.items && data.items.length > 0) {
             html = '<p>Stock suelto (' + data.cantidad + ' / ' + data.capacidad + ' cajas):</p>';
             html += '<table><tr><th>Producto</th><th>Cantidad</th><th>Vencimiento</th><th>Pallet origen</th></tr>';
-            data.items.forEach(it => { html += '<tr><td>' + it.producto + '</td><td>' + it.cantidad + '</td><td>' + (it.fecha_vencimiento || '-') + '</td><td>' + (it.id_pallet ? '<a href="/pallets/detalle/' + it.id_pallet + '">Pallet ' + it.id_pallet + '</a>' : '-') + '</td></tr>'; });
+            data.items.forEach(it => { html += '<tr><td>' + it.producto + '</td><td>' + it.cantidad + '</td><td>' + (it.fecha_vencimiento || '-') + '</td><td>' + (it.id_pallet ? '<a href="#">Pallet ' + it.id_pallet + '</a>' : '-') + '</td></tr>'; });
             html += '</table>'; html += barraLlenado(data.cantidad, data.capacidad, data.pct_llenado);
         } else { html = '<p style="color:#3C6B3F;">Posicion libre.</p>'; }
         document.getElementById('detalle-rack-contenido').innerHTML = html;
@@ -165,7 +165,7 @@
             <table>
                 <tr><th>Fecha</th><th>Pallet</th><th>Proveedor</th><th>Detalle</th></tr>
                 {% for e in entradas %}
-                <tr><td style="font-size:11px;">{{ e.fecha }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=e.id_pallet) }}">{{ e.id_pallet }}</a></td><td>{{ e.proveedor }}</td><td style="font-size:11px;">{{ e.observacion or "-" }}</td></tr>
+                <tr><td style="font-size:11px;">{{ e.fecha }}</td><td>{{ e.id_pallet }}</td><td>{{ e.proveedor }}</td><td style="font-size:11px;">{{ e.observacion or "-" }}</td></tr>
                 {% endfor %}
             </table>
             </div>
@@ -178,7 +178,7 @@
             <table>
                 <tr><th>Fecha</th><th>Pallet</th><th>Destino</th><th>Detalle</th></tr>
                 {% for s in salidas %}
-                <tr><td style="font-size:11px;">{{ s.fecha }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=s.id_pallet) }}">{{ s.id_pallet }}</a></td>
+                <tr><td style="font-size:11px;">{{ s.fecha }}</td><td>{{ s.id_pallet }}</td>
                 <td>{% if s.destino_tipo == 'Produccion1' %}Sala prod. 1{% elif s.destino_tipo == 'Produccion2' %}Sala prod. 2{% elif s.destino_tipo == 'PlantaPrincipal' %}Planta principal{% else %}{{ s.destino_tipo or "-" }}{% endif %}</td>
                 <td style="font-size:11px;">{{ s.observacion or "-" }}</td></tr>
                 {% endfor %}
@@ -195,7 +195,7 @@
         <tr><th>Producto</th><th>Pallet</th><th>Ubicacion</th><th>Cantidad</th><th>Vencimiento</th></tr>
         {% for v in proximos_vencer %}
         <tr class="{% if v.dias_para_vencer < 0 %}fila-vencido{% else %}fila-proximo{% endif %}">
-            <td>{{ v.producto }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=v.id_pallet) }}">{{ v.id_pallet }}</a></td>
+            <td>{{ v.producto }}</td><td>{{ v.id_pallet }}</td>
             <td>{% if v.rack %}{{ v.rack }}-{{ v.nivel }}-{{ v.posicion }}{% else %}-{% endif %}</td>
             <td>{{ v.cantidad }}</td><td>{{ v.fecha_vencimiento }} {% if v.dias_para_vencer < 0 %}(vencido){% else %}(en {{ v.dias_para_vencer }} dias){% endif %}</td>
         </tr>
