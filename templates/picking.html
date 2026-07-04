@@ -1,25 +1,26 @@
 {% extends "base.html" %}
-{% block titulo %}Picking de Bodega{% endblock %}
+{% block titulo %}Picking de Cajas{% endblock %}
 {% block contenido %}
-<h2>Operación de Picking</h2>
-<div class="form-box" style="max-width: 600px; margin: 0 auto;">
+<h2>Operación de Picking y Despacho</h2>
+
+<div class="form-box" style="max-width: 500px; margin: 0 auto;">
+    <h3 style="margin-top: 0; color: var(--terracota-oscuro);">Descontar Stock</h3>
     <form method="POST" action="{{ url_for('picking') }}">
-        <label>Escanear QR del Pallet (Origen en Rack)</label>
-        <input type="text" name="codigo_qr" required placeholder="Ej: QR-HC-XXXX" autofocus>
+        <label>Escanear QR del Pallet de Origen</label>
+        <input type="text" name="codigo_qr" required placeholder="Ej: QR-HC-9823">
         
-        <label>Cantidad a extraer (Cajas)</label>
+        <label>Cantidad de cajas a extraer</label>
         <input type="number" name="cantidad" required min="1" placeholder="Ej: 5">
         
-        <label>Ubicación de Destino (Zona de Piso P1-P12)</label>
-        <select name="destino" required>
-            {% for i in range(1, 13) %}
-            <option value="P{{ i }}">Posición Piso P{{ i }}</option>
-            {% endfor %}
+        <label>Destino (Opcional)</label>
+        <select name="destino">
+            <option value="">Seleccionar destino...</option>
+            <option value="Sala Produccion 1">Sala Producción 1</option>
+            <option value="Sala Produccion 2">Sala Producción 2</option>
+            <option value="Despacho Externo">Despacho Externo</option>
         </select>
         
-        <button type="submit" style="width: 100%; margin-top: 20px; background-color: var(--terracota);">
-            Confirmar Picking a Piso
-        </button>
+        <button type="submit" style="width: 100%; margin-top: 20px; background-color: var(--terracota); border-color: var(--terracota);">Registrar Extracción</button>
     </form>
 </div>
 {% endblock %}
