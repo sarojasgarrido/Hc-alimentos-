@@ -1,54 +1,61 @@
 {% extends "base.html" %}
-{% block titulo %}Gestión de Empresas{% endblock %}
+{% block titulo %}Empresas{% endblock %}
 {% block contenido %}
-<h2>Directorio de Empresas</h2>
+    <h2>Empresas (Proveedores y Clientes)</h2>
 
-<div style="display: flex; gap: 24px; flex-wrap: wrap;">
-    <div class="form-box" style="flex: 1; min-width: 300px;">
-        <h3 style="margin-top: 0;">Agregar Empresa</h3>
+    {% if mensaje %}
+        <p class="mensaje">{{ mensaje }}</p>
+    {% endif %}
+
+    <div class="form-box" style="max-width:560px;">
+        <h3>Agregar empresa</h3>
         <form method="POST" action="{{ url_for('empresas') }}">
-            <label>Nombre o Razón Social</label>
-            <input type="text" name="nombre" required placeholder="Ej: Molinos S.A.">
-            
-            <label>RUT</label>
-            <input type="text" name="rut" placeholder="Ej: 76.123.456-7">
-            
-            <label>Rol comercial</label>
-            <div style="display: flex; gap: 15px; margin-top: 10px; margin-bottom: 20px;">
-                <label style="display: flex; align-items: center; margin-top: 0; font-size: 14px; font-weight: normal; color: var(--carbon);">
-                    <input type="checkbox" name="es_proveedor" style="width: auto; margin-right: 8px; margin-bottom: 0;"> Proveedor
-                </label>
-                <label style="display: flex; align-items: center; margin-top: 0; font-size: 14px; font-weight: normal; color: var(--carbon);">
-                    <input type="checkbox" name="es_cliente" style="width: auto; margin-right: 8px; margin-bottom: 0;"> Cliente
-                </label>
-            </div>
-            
-            <button type="submit" style="width: 100%;">Guardar Empresa</button>
+            <input type="text" name="nombre" placeholder="Nombre" required>
+            <input type="text" name="rut" placeholder="RUT (ej: 76.111.111-1)">
+            <input type="text" name="telefono" placeholder="Telefono">
+            <input type="text" name="correo" placeholder="Correo">
+            <input type="text" name="direccion" placeholder="Direccion">
+            <label style="margin-top:12px;">
+                <input type="checkbox" name="es_proveedor" style="width:auto;"> Es proveedor (nos vende materia prima)
+            </label>
+            <label>
+                <input type="checkbox" name="es_cliente" style="width:auto;"> Es cliente (le despachamos producto)
+            </label>
+            <br><br>
+            <button type="submit">Agregar</button>
         </form>
     </div>
 
-    <div style="flex: 2; min-width: 400px;">
-        <table>
-            <tr>
-                <th>Nombre</th>
-                <th>RUT</th>
-                <th>Roles</th>
-            </tr>
-            {% for e in empresas %}
-            <tr>
-                <td><strong>{{ e.nombre }}</strong></td>
-                <td>{{ e.rut or '-' }}</td>
-                <td>
-                    {% if e.es_proveedor %}<span class="badge badge-activo" style="margin-right: 5px;">Proveedor</span>{% endif %}
-                    {% if e.es_cliente %}<span class="badge badge-picking">Cliente</span>{% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="3" style="text-align: center; color: #5C564E;">No hay empresas registradas en la base de datos.</td>
-            </tr>
-            {% endfor %}
-        </table>
+    <div class="scroll-box">
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>RUT</th>
+            <th>Proveedor</th>
+            <th>Cliente</th>
+            <th>Activo</th>
+            {% if session.get('rol') == 'Administrador' %}
+            <th>Acciones</th>
+            {% endif %}
+        </tr>
+        {% for e in empresas %}
+        <tr>
+            <td>{{ e.id_empresa }}</td>
+            <td>{{ e.nombre }}</td>
+            <td>{{ e.rut or "-" }}</td>
+            <td>{{ "Si" if e.es_proveedor else "No" }}</td>
+            <td>{{ "Si" if e.es_cliente else "No" }}</td>
+            <td>{{ "Si" if e.activo else "No" }}</td>
+            {% if session.get('rol') == 'Administrador' %}
+            <td>
+                <a class="accion-editar" href="{{ url_for('editar_empresa', id_empresa=e.id_empresa) }}">Editar</a>
+                <a class="accion-eliminar" href="{{ url_for('eliminar_empresa', id_empresa=e.id_empresa) }}"
+                   onclick="return confirm('Seguro que quieres eliminar esta empresa?');">Eliminar</a>
+            </td>
+            {% endif %}
+        </tr>
+        {% endfor %}
+    </table>
     </div>
-</div>
 {% endblock %}
