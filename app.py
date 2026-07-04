@@ -2,7 +2,7 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'hc_alimentos_secret_2026'
@@ -14,7 +14,6 @@ def get_db():
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # Nota: Aquí deberías validar el usuario contra tbl_usuarios
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
@@ -26,13 +25,24 @@ def logout():
 # --- DASHBOARD Y VISTAS ---
 @app.route('/dashboard')
 def dashboard():
-    return render_template('dashboard.html')
+    if 'usuario' not in session: return redirect(url_for('login'))
+    
+    # Variables inicializadas para evitar UndefinedError
+    datos = {
+        'porcentaje_ocupacion': 0, 'ubicaciones_ocupadas': 0, 'ubicaciones_total': 0,
+        'pallets_activos': 0, 'pallets_parciales': 0, 'total_entradas': 0, 'total_salidas': 0,
+        'proximos_vencer': [], 'racks_long': [], 'racks_trans': [], 'piso': [],
+        'capacidad_pallet': 0, 'racks_detalle_json': '{}', 'piso_detalle_json': '{}',
+        'pct_rot': {'Alta': 0, 'Media': 0, 'Baja': 0, 'Sin': 0},
+        'rotacion_lista': [], 'entradas': [], 'salidas': []
+    }
+    return render_template('dashboard.html', **datos)
 
 @app.route('/detalle_panel/<vista>')
 def detalle_panel(vista):
     return render_template('detalle_panel.html', titulo=vista, filas=[])
 
-# --- PALLETS ---
+# --- GESTIÓN DE PALLETS ---
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def nuevo_pallet():
     return render_template('pallet_nuevo.html')
@@ -63,7 +73,7 @@ def despachar_pallet(id_pallet):
 
 @app.route('/descargar_qr/<int:id_pallet>')
 def descargar_qr(id_pallet):
-    return "Descarga de QR pendiente"
+    return "Descarga de QR"
 
 # --- PICKING Y PRODUCTOS ---
 @app.route('/picking', methods=['GET', 'POST'])
