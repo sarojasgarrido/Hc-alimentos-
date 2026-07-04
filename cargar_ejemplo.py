@@ -1,3 +1,8 @@
+"""
+Script de un solo uso: carga proveedores y productos DE EJEMPLO
+Corregido para sintaxis PostgreSQL (%s en lugar de ?)
+"""
+
 from db import get_connection
 
 PROVEEDORES = [
@@ -9,23 +14,32 @@ PROVEEDORES = [
 PRODUCTOS = [
     ("100009", "MP. ALMIDON DE MAIZ", None),
     ("100014", "MP. BICARBONATO", "KG"),
-    # ... (resto de tus productos)
+    ("100015", "MP. CACAO NATURAL", "KG"),
+    ("100019", "CITRATO SODIO", "KG"),
+    ("100027", "MP. HARINA DE MANI", "KG"),
+    ("200001", "Aulosa liquida", "KG"),
+    ("200002", "Sal de Mar", "KG"),
+    ("200003", "Pimienta", "KG"),
+    ("200004", "Ajo molido", "GR"),
+    ("200005", "Dextrin", "KG"),
+    ("300001", "Estuche granola your protein", "UNIDAD"),
+    ("300002", "Display de frutos del bosque Protein", "UNIDAD"),
+    ("300003", "Display de frutos del bosque Vegan", "UNIDAD"),
+    ("300004", "Display Chocolate Protein", "UNIDAD"),
+    ("300005", "Display Chocolate Vegan", "UNIDAD"),
 ]
 
 conn = get_connection()
 cursor = conn.cursor()
 
-# Insertar en tbl_empresas
+# Carga de proveedores
 for prov in PROVEEDORES:
     cursor.execute(
-        """
-        INSERT INTO tbl_empresas (nombre, rut, es_proveedor, es_cliente) 
-        VALUES (%s, %s, TRUE, FALSE)
-        """,
+        "INSERT INTO tbl_proveedores (nombre, rut) VALUES (%s, %s)",
         (prov["nombre"], prov["rut"])
     )
 
-# Insertar en tbl_productos
+# Carga de productos
 for codigo, nombre, unidad in PRODUCTOS:
     cursor.execute(
         "INSERT INTO tbl_productos (codigo, nombre, unidad) VALUES (%s, %s, %s)",
@@ -36,4 +50,4 @@ conn.commit()
 cursor.close()
 conn.close()
 
-print(f"Cargados proveedores y productos de ejemplo.")
+print(f"Cargados {len(PROVEEDORES)} proveedores y {len(PRODUCTOS)} productos de ejemplo.")
