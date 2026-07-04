@@ -2,13 +2,18 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-from datetime import timedelta
 
 app = Flask(__name__)
-# Configuración crítica para que la sesión sea persistente
 app.secret_key = 'hc_alimentos_secret_2026'
-app.config['SESSION_COOKIE_SECURE'] = False # Cambiar a True solo si tu sitio tiene HTTPS activo
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+
+# --- CONFIGURACIÓN CRÍTICA PARA RENDER ---
+# Esto permite que la sesión se guarde aunque estés en HTTPS
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
@@ -20,34 +25,33 @@ def login():
         user_in = request.form.get('usuario')
         pass_in = request.form.get('clave')
         
-        try:
-            conn = get_db()
-            cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s AND clave = %s", (user_in, pass_in))
-            user = cur.fetchone()
-            cur.close()
-            conn.close()
-            
-            if user:
-                session.permanent = True
-                session['usuario'] = user['usuario']
-                session['rol'] = user['rol']
-                return redirect(url_for('dashboard'))
-            else:
-                flash("Usuario o clave incorrecta")
-        except Exception as e:
-            flash(f"Error: {e}")
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # Búsqueda exacta
+        cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s AND clave = %s", (user_in, pass_in))
+        user = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if user:
+            session.clear() # Limpiamos sesión previa
+            session['usuario'] = user['usuario']
+            session['rol'] = user['rol']
+            return redirect(url_for('dashboard'))
+        else:
+            flash("Usuario o contraseña incorrectos.")
             
     return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
-    # Depuración: Si no entra al dashboard, es que session está vacía
-    if 'usuario' not in session: 
+    # Si la sesión no se guardó, 'usuario' no estará aquí
+    if 'usuario' not in session:
         return redirect(url_for('login'))
         
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
+    
     cur.execute("SELECT COUNT(*) as total FROM tbl_pallets")
     res = cur.fetchone()
     pallets_activos = res['total'] if res else 0
@@ -67,6 +71,21 @@ def dashboard():
                            pallets_activos=pallets_activos, 
                            ocupacion=round((pallets_activos / 100.0) * 100, 1), 
                            proximos_vencer=proximos)
+
+@app.route('/pallet_nuevo')
+def pallet_nuevo():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('pallet_nuevo.html')
+
+@app.route('/productos')
+def productos():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('productos.html')
+
+@app.route('/empresas')
+def empresas():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('empresas.html')
 
 @app.route('/logout')
 def logout():
