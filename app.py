@@ -18,24 +18,51 @@ def login():
         
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Búsqueda eliminando espacios por seguridad
-        cur.execute("SELECT * FROM tbl_usuarios WHERE TRIM(usuario) = TRIM(%s) AND TRIM(clave) = TRIM(%s)", (user_in, pass_in))
-        user = cur.fetchone()
+        
+        # Obtenemos todos los usuarios para depurar la comparación
+        cur.execute("SELECT usuario, clave FROM tbl_usuarios")
+        todos = cur.fetchall()
         cur.close()
         conn.close()
         
-        if user:
-            session['usuario'] = user['usuario']
-            return redirect(url_for('dashboard'))
-        else:
-            return "Usuario no encontrado o clave incorrecta. <a href='/'>Volver</a>"
+        # Comparación manual para depuración
+        for u in todos:
+            # Imprimimos en los logs de Render para que puedas ver la comparación real
+            print(f"DEBUG: Ingresado '{user_in}' vs DB '{u['usuario']}' | Ingresado '{pass_in}' vs DB '{u['clave']}'")
+            
+            if user_in.strip() == u['usuario'].strip() and pass_in.strip() == u['clave'].strip():
+                session['usuario'] = u['usuario']
+                return redirect(url_for('dashboard'))
+        
+        # Si llega aquí, es que no hubo coincidencia
+        return f"Error: No hay coincidencia. Ingresaste '{user_in}'/'{pass_in}'. Usuarios en DB: {todos}"
             
     return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
-    # Si logras ver este mensaje, el login funcionó
+    if 'usuario' not in session: return redirect(url_for('login'))
     return "Login exitoso. Bienvenido al sistema."
+
+@app.route('/pallet_nuevo')
+def pallet_nuevo():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('pallet_nuevo.html')
+
+@app.route('/productos')
+def productos():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('productos.html')
+
+@app.route('/empresas')
+def empresas():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('empresas.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True)
