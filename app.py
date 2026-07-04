@@ -14,6 +14,8 @@ def get_db():
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        session['usuario'] = request.form.get('usuario')
+        session['rol'] = 'Administrador'
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
@@ -22,12 +24,10 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD Y VISTAS ---
+# --- DASHBOARD ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    
-    # Variables inicializadas para evitar UndefinedError
     datos = {
         'porcentaje_ocupacion': 0, 'ubicaciones_ocupadas': 0, 'ubicaciones_total': 0,
         'pallets_activos': 0, 'pallets_parciales': 0, 'total_entradas': 0, 'total_salidas': 0,
@@ -38,14 +38,28 @@ def dashboard():
     }
     return render_template('dashboard.html', **datos)
 
-@app.route('/detalle_panel/<vista>')
-def detalle_panel(vista):
-    return render_template('detalle_panel.html', titulo=vista, filas=[])
-
 # --- GESTIÓN DE PALLETS ---
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def nuevo_pallet():
-    return render_template('pallet_nuevo.html')
+    if 'usuario' not in session: return redirect(url_for('login'))
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if request.method == 'POST':
+        cur.execute("INSERT INTO tbl_pallets (id_proveedor, factura, estado) VALUES (%s, %s, 'Activo')", 
+                    (request.form.get('id_proveedor'), request.form.get('factura')))
+        conn.commit()
+        flash("Pallet registrado")
+        return redirect(url_for('dashboard'))
+    try:
+        cur.execute("SELECT id_proveedor, nombre FROM tbl_proveedores")
+        proveedores = cur.fetchall()
+        cur.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = True")
+        productos = cur.fetchall()
+    except:
+        proveedores, productos = [], []
+    cur.close()
+    conn.close()
+    return render_template('pallet_nuevo.html', proveedores=proveedores, productos=productos)
 
 @app.route('/pallets/detalle/<int:id_pallet>')
 def ver_pallet(id_pallet):
@@ -71,10 +85,6 @@ def editar_pallet(id_pallet):
 def despachar_pallet(id_pallet):
     return redirect(url_for('ver_pallet', id_pallet=id_pallet))
 
-@app.route('/descargar_qr/<int:id_pallet>')
-def descargar_qr(id_pallet):
-    return "Descarga de QR"
-
 # --- PICKING Y PRODUCTOS ---
 @app.route('/picking', methods=['GET', 'POST'])
 def picking():
@@ -94,14 +104,6 @@ def productos():
     conn.close()
     return render_template('productos.html', productos=lista)
 
-@app.route('/editar_producto/<int:id_producto>', methods=['GET', 'POST'])
-def editar_producto(id_producto):
-    return render_template('producto_editar.html', producto={'id_producto': id_producto})
-
-@app.route('/eliminar_producto/<int:id_producto>')
-def eliminar_producto(id_producto):
-    return redirect(url_for('productos'))
-
 # --- EMPRESAS Y USUARIOS ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
@@ -117,14 +119,6 @@ def empresas():
     conn.close()
     return render_template('empresas.html', empresas=lista)
 
-@app.route('/editar_empresa/<int:id_empresa>', methods=['GET', 'POST'])
-def editar_empresa(id_empresa):
-    return render_template('empresa_editar.html', empresa={'id_empresa': id_empresa})
-
-@app.route('/eliminar_empresa/<int:id_empresa>')
-def eliminar_empresa(id_empresa):
-    return redirect(url_for('empresas'))
-
 @app.route('/usuarios', methods=['GET', 'POST'])
 def usuarios():
     conn = get_db()
@@ -134,19 +128,14 @@ def usuarios():
         cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol, activo) VALUES (%s, %s, %s, 'Operador', True)", 
                     (request.form.get('nombre'), request.form.get('usuario'), clave))
         conn.commit()
-    cur.execute("SELECT * FROM tbl_usuarios")
-    lista = cur.fetchall()
+    try:
+        cur.execute("SELECT * FROM tbl_usuarios")
+        lista = cur.fetchall()
+    except:
+        lista = []
     cur.close()
     conn.close()
     return render_template('usuarios.html', usuarios=lista)
-
-@app.route('/desactivar_usuario/<int:id_usuario>')
-def desactivar_usuario(id_usuario):
-    return redirect(url_for('usuarios'))
-
-@app.route('/cambiar_clave_usuario/<int:id_usuario>', methods=['POST'])
-def cambiar_clave_usuario(id_usuario):
-    return redirect(url_for('usuarios'))
 
 if __name__ == '__main__':
     app.run(debug=True)
