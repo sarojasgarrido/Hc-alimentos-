@@ -1,9 +1,27 @@
 {% extends "base.html" %}
 {% block titulo %}Ingresar Pallet{% endblock %}
 {% block contenido %}
-<h2>Ingreso de Pallet</h2>
-<div style="background: var(--crema-card); border: 1px solid var(--gris-borde); border-radius: 12px; padding: 32px; text-align: center;">
-    <h3 style="color: var(--carbon);">Módulo habilitado</h3>
-    <p style="color: var(--gris-texto);">Interfaz lista bajo el nombre pallet_nuevo. Próximamente se integrará la lógica de generación y lectura de QR para asignación caótica.</p>
+<h2>Recepción e Ingreso de Pallets</h2>
+
+<div class="form-box" style="max-width: 600px; margin: 0 auto;">
+    <h3 style="margin-top: 0; color: var(--rojo-marca);">Registro de Ingreso</h3>
+    <form method="POST" action="{{ url_for('pallet_nuevo') }}">
+        
+        <label>Código QR del Pallet</label>
+        <input type="text" name="codigo_qr" required placeholder="Escanee la etiqueta (Ej: QR-HC-9823)">
+        
+        <label>Empresa Proveedora</label>
+        <select name="id_proveedor" required>
+            <option value="">-- Seleccione el proveedor --</option>
+            {% for prov in proveedores %}
+            <option value="{{ prov.id_empresa }}">{{ prov.nombre }}</option>
+            {% endfor %}
+        </select>
+        
+        <label>Documento / Factura (Opcional)</label>
+        <input type="text" name="factura" placeholder="Ej: Factura N° 14592">
+        
+        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">Registrar Pallet en Base de Datos</button>
+    </form>
 </div>
 {% endblock %}
