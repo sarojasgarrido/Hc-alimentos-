@@ -1,4 +1,5 @@
 import os
+import uuid
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template, request, redirect, url_for, session, g, flash
@@ -56,7 +57,6 @@ def dashboard():
     }
     return render_template('dashboard.html', **datos_dashboard)
 
-# --- USUARIOS CORREGIDO ---
 @app.route('/usuarios', methods=['GET', 'POST'])
 @admin_required
 def usuarios():
@@ -68,7 +68,6 @@ def usuarios():
         clave = request.form.get('clave')
         rol = request.form.get('rol')
         try:
-            # Ahora enviamos los 4 campos obligatorios de la tabla de PostgreSQL
             cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol) VALUES (%s, %s, %s, %s)", 
                         (nombre, usuario, clave, rol))
             conn.commit()
@@ -87,7 +86,6 @@ def usuarios():
         cur.close()
     return render_template('usuarios.html', usuarios=lista_usuarios)
 
-# --- BUSCAR PALLETS CORREGIDO ---
 @app.route('/buscar_pallets', methods=['GET'])
 def buscar_pallets():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -110,7 +108,6 @@ def buscar_pallets():
         cur.close()
     return render_template('buscar_pallets.html', resultados=resultados)
 
-# --- RUTAS DE PRODUCTOS Y EMPRESAS (SIN CAMBIOS) ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -164,7 +161,7 @@ def empresas():
         cur.close()
     return render_template('empresas.html', empresas=lista_empresas)
 
-# --- NUEVOS MÓDULOS DE BODEGA ---
+# --- MÓDULO INGRESO DE PALLETS ACTUALIZADO ---
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def pallet_nuevo(): 
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -173,27 +170,52 @@ def pallet_nuevo():
     
     if request.method == 'POST':
         id_proveedor = request.form.get('id_proveedor')
-        codigo_qr = request.form.get('codigo_qr')
         factura = request.form.get('factura')
+        
+        # Recuperar arrays de productos ingresados dinámicamente
+        id_productos = request.form.getlist('id_producto[]')
+        cantidades = request.form.getlist('cantidad[]')
+        elaboraciones = request.form.getlist('fecha_elaboracion[]')
+        vencimientos = request.form.getlist('fecha_vencimiento[]')
+
+        # Generación automática del QR
+        codigo_qr = f"HC-{str(uuid.uuid4())[:8].upper()}"
+
         try:
-            cur.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr, factura) VALUES (%s, %s, %s)", 
+            # Insertar cabecera del pallet
+            cur.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr, factura) VALUES (%s, %s, %s) RETURNING id_pallet", 
                         (id_proveedor, codigo_qr, factura))
+            id_pallet = cur.fetchone()['id_pallet']
+
+            # Insertar detalle de productos iterando sobre las listas
+            for i in range(len(id_productos)):
+                cur.execute("""
+                    INSERT INTO tbl_pallet_producto 
+                    (id_pallet, id_producto, cantidad, cantidad_original, fecha_elaboracion, fecha_vencimiento) 
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (id_pallet, id_productos[i], cantidades[i], cantidades[i], elaboraciones[i], vencimientos[i]))
+
             conn.commit()
-            flash("Pallet ingresado correctamente. (Pendiente asignar posición caótica).")
+            flash(f"Pallet registrado correctamente. QR Asignado: {codigo_qr}")
         except Exception as e:
             conn.rollback()
             flash(f"Error al ingresar pallet: {str(e)}")
         return redirect(url_for('pallet_nuevo'))
 
     try:
-        cur.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+        # Cargar selectores
+        cur.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE ORDER BY nombre ASC")
         proveedores = cur.fetchall()
+        
+        cur.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre ASC")
+        productos = cur.fetchall()
     except Exception as e:
         proveedores = []
+        productos = []
     finally:
         cur.close()
         
-    return render_template('pallet_nuevo.html', proveedores=proveedores)
+    return render_template('pallet_nuevo.html', proveedores=proveedores, productos=productos)
 
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
