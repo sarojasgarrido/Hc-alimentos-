@@ -6,7 +6,6 @@ from flask import Flask, render_template, request, redirect, url_for, session, g
 from functools import wraps
 
 app = Flask(__name__)
-# Asegúrate de configurar SECRET_KEY en tu entorno
 app.secret_key = os.environ.get('SECRET_KEY', 'hc_alimentos_secret_2026')
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
@@ -31,7 +30,6 @@ def admin_required(f):
     return decorated_function
 
 # --- AUTENTICACIÓN ---
-
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -58,8 +56,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD Y ALERTAS ---
-
+# --- DASHBOARD ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -77,7 +74,6 @@ def dashboard():
     return render_template('dashboard.html', proximos_vencer=proximos)
 
 # --- MÓDULOS DE BODEGA ---
-
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def pallet_nuevo(): 
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -93,8 +89,8 @@ def pallet_nuevo():
             
             p_ids = request.form.getlist('id_producto[]')
             cantidades = request.form.getlist('cantidad[]')
+            elaboraciones = request.form.getlist('fecha_elaboracion[]')
+            vencimientos = request.form.getlist('fecha_vencimiento[]')
+            
             for i in range(len(p_ids)):
-                cur.execute("INSERT INTO tbl_pallet_producto (id_pallet, id_producto, cantidad, cantidad_original) VALUES (%s, %s, %s, %s)",
-                            (id_pallet, p_ids[i], cantidades[i], cantidades[i]))
-            conn.commit()
-            flash(f"Pallet creado
+                cur.execute("""INSERT INTO tbl_pallet
