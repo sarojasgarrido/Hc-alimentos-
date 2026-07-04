@@ -1,9 +1,26 @@
 {% extends "base.html" %}
-{% block titulo %}Picking y Despacho{% endblock %}
+{% block titulo %}Picking de Cajas{% endblock %}
 {% block contenido %}
-<h2>Picking / Despacho</h2>
-<div style="background: var(--crema-card); border: 1px solid var(--gris-borde); border-radius: 12px; padding: 32px; text-align: center;">
-    <h3 style="color: var(--carbon);">Módulo habilitado</h3>
-    <p style="color: var(--gris-texto);">Interfaz lista. Próximamente se integrará el descuento de cajas y trazabilidad de destino.</p>
+<h2>Operación de Picking y Despacho</h2>
+
+<div class="form-box" style="max-width: 500px; margin: 0 auto;">
+    <h3 style="margin-top: 0; color: var(--terracota-oscuro);">Descontar Stock</h3>
+    <form method="POST" action="{{ url_for('picking') }}">
+        <label>Escanear QR del Pallet de Origen</label>
+        <input type="text" name="codigo_qr" required placeholder="Ej: QR-HC-9823">
+        
+        <label>Cantidad de cajas a extraer</label>
+        <input type="number" name="cantidad" required min="1" placeholder="Ej: 5">
+        
+        <label>Destino (Opcional)</label>
+        <select name="destino">
+            <option value="">Seleccionar destino...</option>
+            <option value="Sala Produccion 1">Sala Producción 1</option>
+            <option value="Sala Produccion 2">Sala Producción 2</option>
+            <option value="Despacho Externo">Despacho Externo</option>
+        </select>
+        
+        <button type="submit" style="width: 100%; margin-top: 20px; background-color: var(--terracota); border-color: var(--terracota);">Registrar Extracción</button>
+    </form>
 </div>
 {% endblock %}
