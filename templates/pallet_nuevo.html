@@ -1,72 +1,9 @@
 {% extends "base.html" %}
-{% block titulo %}Ingreso de pallet{% endblock %}
+{% block titulo %}Ingresar Pallet{% endblock %}
 {% block contenido %}
-    <h2>Ingreso de pallet</h2>
-
-    {% if error %}
-        <p class="mensaje" style="background-color:#f8d7da; color:#721c24;">{{ error }}</p>
-    {% endif %}
-
-    <div class="form-box" style="max-width:700px;">
-        <form method="POST" id="form-pallet">
-            <label>Proveedor</label>
-            <select name="id_proveedor" required>
-                <option value="" disabled selected>Selecciona un proveedor</option>
-                {% for pr in proveedores %}
-                <option value="{{ pr.id_proveedor }}">{{ pr.nombre }}</option>
-                {% endfor %}
-            </select>
-
-            <label>N de factura</label>
-            <input type="text" name="factura">
-
-            <h3>Productos en este pallet</h3>
-            <div id="filas-productos">
-                <div class="fila-producto" style="border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:4px;">
-                    <label>Producto</label>
-                    <select name="id_producto[]" required>
-                        <option value="" disabled selected>Selecciona un producto</option>
-                        {% for p in productos %}
-                        <option value="{{ p.id_producto }}">{{ p.nombre }}</option>
-                        {% endfor %}
-                    </select>
-
-                    <label>Cantidad</label>
-                    <input type="number" name="cantidad[]" min="1" required>
-
-                    <label>Fecha de elaboracion</label>
-                    <input type="date" name="fecha_elaboracion[]">
-
-                    <label>Fecha de vencimiento</label>
-                    <input type="date" name="fecha_vencimiento[]">
-
-                    <button type="button" class="quitar-fila" onclick="quitarFila(this)" style="background-color:#d9534f; margin-top:8px;">Quitar producto</button>
-                </div>
-            </div>
-
-            <button type="button" onclick="agregarFila()">+ Agregar otro producto</button>
-
-            <br><br>
-            <button type="submit">Registrar pallet</button>
-        </form>
-    </div>
-
-    <script>
-        function agregarFila() {
-            const filas = document.getElementById('filas-productos');
-            const nueva = filas.children[0].cloneNode(true);
-            nueva.querySelectorAll('input').forEach(i => i.value = '');
-            nueva.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
-            filas.appendChild(nueva);
-        }
-
-        function quitarFila(boton) {
-            const filas = document.getElementById('filas-productos');
-            if (filas.children.length > 1) {
-                boton.closest('.fila-producto').remove();
-            } else {
-                alert('El pallet debe tener al menos un producto.');
-            }
-        }
-    </script>
+<h2>Ingreso de Pallet</h2>
+<div style="background: var(--crema-card); border: 1px solid var(--gris-borde); border-radius: 12px; padding: 32px; text-align: center;">
+    <h3 style="color: var(--carbon);">Módulo habilitado</h3>
+    <p style="color: var(--gris-texto);">Interfaz lista bajo el nombre pallet_nuevo. Próximamente se integrará la lógica de generación y lectura de QR para asignación caótica.</p>
+</div>
 {% endblock %}
