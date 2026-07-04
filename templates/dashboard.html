@@ -4,43 +4,43 @@
 <h2>Panel de Control</h2>
 
 <!-- Métricas de capacidad -->
-<div class="tarjetas">
-    <div class="tarjeta">
-        <div class="numero">0%</div>
+<div class="tarjetas" style="display: flex; gap: 20px; margin-bottom: 30px;">
+    <div class="tarjeta" style="padding: 20px; background: #fff; border: 1px solid #ddd; flex: 1;">
+        <div class="numero" style="font-size: 24px; font-weight: bold;">{{ ocupacion }}%</div>
         <div class="etiqueta">Ocupación Bodega</div>
     </div>
-    <div class="tarjeta">
-        <div class="numero">0</div>
+    <div class="tarjeta" style="padding: 20px; background: #fff; border: 1px solid #ddd; flex: 1;">
+        <div class="numero" style="font-size: 24px; font-weight: bold;">{{ pallets_activos }}</div>
         <div class="etiqueta">Pallets Activos</div>
-    </div>
-    <div class="tarjeta">
-        <div class="numero">0</div>
-        <div class="etiqueta">Entradas Hoy</div>
     </div>
 </div>
 
-<!-- Alertas Críticas (Lo solicitado por el profesor) -->
-<h3>Alertas: Productos próximos a vencer (7 días)</h3>
-<table>
-    <tr>
-        <th>Producto</th>
-        <th>Fecha de Vencimiento</th>
-        <th>Días para vencer</th>
-    </tr>
-    {% for p in proximos_vencer %}
-    <tr class="fila-vencido">
-        <td>{{ p.nombre }}</td>
-        <td>{{ p.fecha_vencimiento }}</td>
-        <td>{{ p.dias_restantes }} días</td>
-    </tr>
-    {% else %}
-    <tr>
-        <td colspan="3" style="text-align: center; color: var(--verde-ok);">
-            ✅ No hay productos críticos en bodega.
-        </td>
-    </tr>
-    {% endfor %}
-</table>
+<!-- Sección de estado de Racks (Visualización profesional) -->
+<h3>Estado General de Racks</h3>
+<div class="rack-container" style="background: #f4f4f4; padding: 20px; border-radius: 8px;">
+    <!-- Aquí puedes renderizar gráficamente tus racks o dejar el estado -->
+    <p>Visualización de Racks: <span style="color: green; font-weight: bold;">Operativo</span></p>
+</div>
 
-<!-- Aquí podrías agregar más secciones de métricas si el profesor lo requiere -->
+<h3>Alertas: Productos próximos a vencer (7 días)</h3>
+<table style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr style="background: #eee;">
+            <th>Producto</th>
+            <th>Vencimiento</th>
+            <th>Días Restantes</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in proximos_vencer %}
+        <tr style="border-bottom: 1px solid #ddd;">
+            <td>{{ p.nombre }}</td>
+            <td>{{ p.fecha_vencimiento }}</td>
+            <td>{{ p.dias_restantes }} días</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" style="text-align: center;">Sin alertas críticas.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
