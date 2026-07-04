@@ -1,16 +1,17 @@
 {% extends "base.html" %}
-{% block titulo %}Consultar Pallet{% endblock %}
+{% block titulo %}Consultar pallet{% endblock %}
 {% block contenido %}
-<h2>Búsqueda Rápida de Pallets</h2>
+    <h2>Consultar pallet</h2>
 
-<div class="form-box" style="max-width: 500px; margin: 0 auto; text-align: center;">
-    <h3 style="margin-top: 0; color: var(--carbon);">Escanear Código</h3>
-    <p style="font-size: 13px; color: var(--gris-texto); margin-bottom: 20px;">Conecte su lector y escanee el QR, o ingrese el código manualmente para localizar el pallet en la bodega.</p>
-    
-    <form method="GET" action="{{ url_for('consulta_pallet') }}">
-        <input type="text" name="qr_buscar" required placeholder="Haga clic aquí y escanee el QR..." style="text-align: center; font-size: 16px; padding: 14px;">
-        
-        <button type="submit" style="width: 100%; margin-top: 15px;">Localizar Pallet</button>
-    </form>
-</div>
+    {% if error %}
+        <p class="mensaje" style="background-color:#f8d7da; color:#721c24;">{{ error }}</p>
+    {% endif %}
+
+    <div class="form-box">
+        <p>Escanea el QR del pallet con la camara de tu celular, o ingresa el codigo manualmente:</p>
+        <form method="POST">
+            <input type="text" name="codigo_qr" placeholder="Codigo del pallet" required>
+            <button type="submit">Buscar</button>
+        </form>
+    </div>
 {% endblock %}
