@@ -1,67 +1,58 @@
 {% extends "base.html" %}
-
-{% block titulo %}Gestión de Usuarios{% endblock %}
-
+{% block titulo %}Gestión de Personal{% endblock %}
 {% block contenido %}
-<div class="container">
-    <h2>Gestión de Operadores</h2>
+<h2>Directorio de Personal</h2>
 
-    <!-- Formulario de creación -->
-    <div class="card">
-        <h3>Crear nuevo usuario</h3>
+<div style="display: flex; gap: 24px; flex-wrap: wrap;">
+    <div class="form-box" style="flex: 1; min-width: 300px;">
+        <h3 style="margin-top: 0;">Agregar Operador/Admin</h3>
         <form method="POST" action="{{ url_for('usuarios') }}">
-            <div class="form-group">
-                <label for="nombre">Nombre:</label>
-                <input type="text" id="nombre" name="nombre" placeholder="Nombre del operador" required>
-            </div>
-            <div class="form-group">
-                <label for="rol">Rol:</label>
-                <select id="rol" name="rol" required>
-                    <option value="Operador">Operador</option>
-                    <option value="Administrador">Administrador</option>
-                </select>
-            </div>
-            <button type="submit">Crear Usuario</button>
+            <label>Nombre Completo</label>
+            <input type="text" name="nombre" required placeholder="Ej: Juan Pérez">
+            
+            <label>Usuario (Login)</label>
+            <input type="text" name="usuario" required placeholder="Ej: jperez">
+            
+            <label>Contraseña</label>
+            <input type="password" name="clave" required placeholder="Asigne una contraseña">
+            
+            <label>Rol en el sistema</label>
+            <select name="rol" required>
+                <option value="Operador">Operador de Bodega</option>
+                <option value="Administrador">Administrador</option>
+            </select>
+            
+            <button type="submit" style="width: 100%; margin-top: 15px;">Crear Acceso</button>
         </form>
     </div>
 
-    <hr style="margin: 30px 0;">
-
-    <!-- Lista de usuarios existentes -->
-    <h3>Usuarios registrados</h3>
-    <table>
-        <thead>
+    <div style="flex: 2; min-width: 400px;">
+        <table>
             <tr>
-                <th>ID</th>
                 <th>Nombre</th>
+                <th>Usuario</th>
                 <th>Rol</th>
+                <th>Estado</th>
             </tr>
-        </thead>
-        <tbody>
             {% for u in usuarios %}
             <tr>
-                <td>{{ u.id_usuario }}</td>
-                <td>{{ u.nombre }}</td>
+                <td><strong>{{ u.nombre }}</strong></td>
+                <td>{{ u.usuario }}</td>
                 <td>{{ u.rol }}</td>
+                <td>
+                    {% if u.activo %}
+                        <span class="badge badge-activo">Activo</span>
+                    {% else %}
+                        <span class="badge badge-consumido">Inactivo</span>
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="3" style="text-align: center;">No hay usuarios registrados actualmente.</td>
+                <td colspan="4" style="text-align: center; color: #5C564E;">No hay personal registrado.</td>
             </tr>
             {% endfor %}
-        </tbody>
-    </table>
+        </table>
+    </div>
 </div>
-
-<style>
-    .container { max-width: 800px; margin: auto; padding: 20px; }
-    .card { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
-    .form-group { margin-bottom: 15px; }
-    .form-group label { display: block; margin-bottom: 5px; }
-    .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th { background-color: #4B7A4E; color: white; padding: 12px; text-align: left; }
-    td { padding: 10px; border-bottom: 1px solid #ddd; }
-    tr:nth-child(even) { background-color: #f9f9f9; }
-</style>
 {% endblock %}
