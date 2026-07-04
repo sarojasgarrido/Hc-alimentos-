@@ -1,10 +1,17 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 
 app = Flask(__name__)
 app.secret_key = 'hc_alimentos_secret_2026'
+
+app.config.update(
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+)
+
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
@@ -18,31 +25,48 @@ def login():
         
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Obtenemos todos los usuarios para depurar la comparación
-        cur.execute("SELECT usuario, clave FROM tbl_usuarios")
-        todos = cur.fetchall()
+        # Comparación limpia
+        cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s AND clave = %s", (user_in, pass_in))
+        user = cur.fetchone()
         cur.close()
         conn.close()
         
-        # Comparación manual para depuración
-        for u in todos:
-            # Imprimimos en los logs de Render para que puedas ver la comparación real
-            print(f"DEBUG: Ingresado '{user_in}' vs DB '{u['usuario']}' | Ingresado '{pass_in}' vs DB '{u['clave']}'")
-            
-            if user_in.strip() == u['usuario'].strip() and pass_in.strip() == u['clave'].strip():
-                session['usuario'] = u['usuario']
-                return redirect(url_for('dashboard'))
-        
-        # Si llega aquí, es que no hubo coincidencia
-        return f"Error: No hay coincidencia. Ingresaste '{user_in}'/'{pass_in}'. Usuarios en DB: {todos}"
+        if user:
+            session.clear()
+            session['usuario'] = user['usuario']
+            session['rol'] = user['rol']
+            return redirect(url_for('dashboard'))
+        else:
+            flash("Usuario o contraseña incorrectos.")
             
     return render_template('login.html')
 
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    return "Login exitoso. Bienvenido al sistema."
+    
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cur.execute("SELECT COUNT(*) as total FROM tbl_pallets")
+    res = cur.fetchone()
+    pallets_activos = res['total'] if res else 0
+    
+    cur.execute("""
+        SELECT p.nombre, pp.fecha_vencimiento, 
+        (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
+        FROM tbl_pallet_producto pp
+        JOIN tbl_productos p ON pp.id_producto = p.id_producto
+        WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
+    """)
+    proximos = cur.fetchall()
+    cur.close()
+    conn.close()
+    
+    return render_template('dashboard.html', 
+                           pallets_activos=pallets_activos, 
+                           ocupacion=round((pallets_activos / 100.0) * 100, 1), 
+                           proximos_vencer=proximos)
 
 @app.route('/pallet_nuevo')
 def pallet_nuevo():
