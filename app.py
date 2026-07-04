@@ -29,7 +29,7 @@ def login():
                 return redirect(url_for('dashboard'))
             flash("Credenciales incorrectas")
         except Exception as e:
-            flash(f"Error de base de datos: {e}")
+            flash(f"Error: {e}")
     return render_template('login.html')
 
 @app.route('/dashboard')
@@ -38,35 +38,39 @@ def dashboard():
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
     
-    # 1. Pallets Activos con valor por defecto
     cur.execute("SELECT COUNT(*) as activos FROM tbl_pallets")
     res = cur.fetchone()
     pallets_activos = res['activos'] if res else 0
     
-    # 2. Alertas con manejo de errores (evita fallos si no hay productos)
-    proximos = []
-    try:
-        cur.execute("""
-            SELECT p.nombre, pp.fecha_vencimiento, 
-            (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
-            FROM tbl_pallet_producto pp
-            JOIN tbl_productos p ON pp.id_producto = p.id_producto
-            WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
-        """)
-        proximos = cur.fetchall()
-    except:
-        proximos = []
+    cur.execute("""
+        SELECT p.nombre, pp.fecha_vencimiento, 
+        (pp.fecha_vencimiento - CURRENT_DATE) as dias_restantes
+        FROM tbl_pallet_producto pp
+        JOIN tbl_productos p ON pp.id_producto = p.id_producto
+        WHERE pp.fecha_vencimiento BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '7 days')
+    """)
+    proximos = cur.fetchall()
     
     cur.close()
     conn.close()
     
-    # Ocupación segura: evita división por cero o errores de tipo
-    ocupacion = round((pallets_activos / 100.0) * 100, 1) if pallets_activos else 0
-    
-    return render_template('dashboard.html', 
-                           pallets_activos=pallets_activos, 
-                           ocupacion=ocupacion, 
-                           proximos_vencer=proximos)
+    ocupacion = round((pallets_activos / 100.0) * 100, 1)
+    return render_template('dashboard.html', pallets_activos=pallets_activos, ocupacion=ocupacion, proximos_vencer=proximos)
+
+@app.route('/pallet_nuevo', methods=['GET', 'POST'])
+def pallet_nuevo():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('pallet_nuevo.html')
+
+@app.route('/productos')
+def productos():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('productos.html')
+
+@app.route('/empresas')
+def empresas():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('empresas.html')
 
 @app.route('/logout')
 def logout():
