@@ -1,20 +1,25 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
-import json
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from werkzeug.security import generate_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'hc_alimentos_secret_2026'
 
 def get_db():
+    # Asegúrate de que esta variable esté configurada en tu entorno de Render
     return psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
 
 # --- AUTENTICACIÓN ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        # Tu lógica de validación de usuario aquí
+        user_in = request.form.get('usuario')
+        pass_in = request.form.get('clave')
+        # Lógica de verificación pendiente de implementar según tu esquema de base de datos
+        session['usuario'] = user_in
+        session['rol'] = 'Administrador' # Ejemplo
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
@@ -26,79 +31,78 @@ def logout():
 # --- DASHBOARD ---
 @app.route('/dashboard')
 def dashboard():
-    return render_template('dashboard.html', 
-        porcentaje_ocupacion=0, ubicaciones_ocupadas=0, ubicaciones_total=0,
-        pallets_activos=0, pallets_parciales=0, total_entradas=0, total_salidas=0,
-        proximos_vencer=[], racks_long=[], piso=[], racks_trans=[], capacidad_pallet=0,
-        racks_detalle_json=json.dumps({}), piso_detalle_json=json.dumps({}),
-        pct_rot={'Alta':0, 'Media':0, 'Baja':0, 'Sin':0}, rotacion_lista=[], entradas=[], salidas=[])
-
-@app.route('/detalle_panel/<vista>')
-def detalle_panel(vista):
-    return render_template('detalle_panel.html', titulo=vista, filas=[])
+    return render_template('dashboard.html')
 
 # --- GESTIÓN DE PALLETS ---
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def nuevo_pallet():
-    return render_template('pallet_nuevo.html', proveedores=[], productos=[])
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if request.method == 'POST':
+        id_prov = request.form.get('id_proveedor')
+        factura = request.form.get('factura')
+        cur.execute("INSERT INTO tbl_pallets (id_proveedor, factura, estado) VALUES (%s, %s, 'Activo')", (id_prov, factura))
+        conn.commit()
+        flash("Pallet registrado")
+        return redirect(url_for('dashboard'))
+    cur.execute("SELECT * FROM tbl_proveedores")
+    provs = cur.fetchall()
+    cur.execute("SELECT * FROM tbl_productos")
+    prods = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-@app.route('/pallets/detalle/<int:id_pallet>')
-def ver_pallet(id_pallet):
-    return render_template('pallet_detalle.html', pallet={}, items=[])
-
-@app.route('/consulta_pallet', methods=['GET', 'POST'])
-def consulta_pallet():
-    return render_template('consulta_pallet.html')
-
-@app.route('/buscar_pallets')
-def buscar_pallets():
-    return render_template('buscar_pallets.html', resultados=None, filtros={}, proveedores=[], productos=[])
-
-@app.route('/historial_pallet/<int:id_pallet>')
-def historial_pallet(id_pallet):
-    return render_template('historial_pallet.html', id_pallet=id_pallet, movimientos=[], ubicaciones=[])
-
-@app.route('/editar_pallet/<int:id_pallet>', methods=['GET', 'POST'])
-def editar_pallet(id_pallet):
-    return render_template('editar_pallet.html', pallet={}, items=[], proveedores=[], productos=[])
-
-@app.route('/despachar_pallet/<int:id_pallet>', methods=['POST'])
-def despachar_pallet(id_pallet):
-    return redirect(url_for('ver_pallet', id_pallet=id_pallet))
-
-# --- PICKING Y PRODUCTOS ---
-@app.route('/picking', methods=['GET', 'POST'])
-def picking():
-    return render_template('picking.html', productos=[], stock_piso=[])
-
+# --- PRODUCTOS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
-    return render_template('productos.html', productos=[])
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        codigo = request.form.get('codigo')
+        unidad = request.form.get('unidad')
+        cur.execute("INSERT INTO tbl_productos (nombre, codigo, unidad, activo) VALUES (%s, %s, %s, True)", (nombre, codigo, unidad))
+        conn.commit()
+    cur.execute("SELECT * FROM tbl_productos")
+    lista = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('productos.html', productos=lista)
 
-@app.route('/editar_producto/<int:id_producto>', methods=['GET', 'POST'])
-def editar_producto(id_producto):
-    return render_template('producto_editar.html', producto={})
-
-# --- EMPRESAS Y USUARIOS ---
+# --- EMPRESAS ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
-    return render_template('empresas.html', empresas=[])
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        rut = request.form.get('rut')
+        cur.execute("INSERT INTO tbl_empresas (nombre, rut) VALUES (%s, %s)", (nombre, rut))
+        conn.commit()
+    cur.execute("SELECT * FROM tbl_empresas")
+    lista = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('empresas.html', empresas=lista)
 
-@app.route('/editar_empresa/<int:id_empresa>', methods=['GET', 'POST'])
-def editar_empresa(id_empresa):
-    return render_template('empresa_editar.html', empresa={})
-
+# --- USUARIOS ---
 @app.route('/usuarios', methods=['GET', 'POST'])
 def usuarios():
-    return render_template('usuarios.html', usuarios=[])
-
-@app.route('/desactivar_usuario/<int:id_usuario>')
-def desactivar_usuario(id_usuario):
-    return redirect(url_for('usuarios'))
-
-@app.route('/cambiar_clave_usuario/<int:id_usuario>', methods=['POST'])
-def cambiar_clave_usuario(id_usuario):
-    return redirect(url_for('usuarios'))
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    if request.method == 'POST':
+        nombre = request.form.get('nombre')
+        user = request.form.get('usuario')
+        clave = generate_password_hash(request.form.get('clave'))
+        cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol, activo) VALUES (%s, %s, %s, 'Operador', True)", 
+                    (nombre, user, clave))
+        conn.commit()
+    cur.execute("SELECT * FROM tbl_usuarios")
+    lista = cur.fetchall()
+    cur.close()
+    conn.close()
+    return render_template('usuarios.html', usuarios=lista)
 
 if __name__ == '__main__':
     app.run(debug=True)
