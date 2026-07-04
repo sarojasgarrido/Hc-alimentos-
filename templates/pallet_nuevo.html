@@ -1,75 +1,27 @@
 {% extends "base.html" %}
-{% block titulo %}Ingreso de Pallet{% endblock %}
+{% block titulo %}Ingresar Pallet{% endblock %}
 {% block contenido %}
-<h2>Ingreso de pallet</h2>
+<h2>Recepción e Ingreso de Pallets</h2>
 
-<div class="form-box" style="max-width: 700px; margin: 0 auto;">
-    <form method="POST" action="{{ url_for('pallet_nuevo') }}" id="form-pallet">
+<div class="form-box" style="max-width: 600px; margin: 0 auto;">
+    <h3 style="margin-top: 0; color: var(--rojo-marca);">Registro de Ingreso</h3>
+    <form method="POST" action="{{ url_for('pallet_nuevo') }}">
         
-        <!-- Datos de Cabecera -->
-        <label>Proveedor</label>
+        <label>Código QR del Pallet</label>
+        <input type="text" name="codigo_qr" required placeholder="Escanee la etiqueta (Ej: QR-HC-9823)">
+        
+        <label>Empresa Proveedora</label>
         <select name="id_proveedor" required>
-            <option value="">-- Seleccione proveedor --</option>
+            <option value="">-- Seleccione el proveedor --</option>
             {% for prov in proveedores %}
             <option value="{{ prov.id_empresa }}">{{ prov.nombre }}</option>
             {% endfor %}
         </select>
         
-        <label>Número de factura</label>
-        <input type="text" name="factura" placeholder="Ej: 33456" required>
+        <label>Documento / Factura (Opcional)</label>
+        <input type="text" name="factura" placeholder="Ej: Factura N° 14592">
         
-        <!-- Contenedor dinámico para los productos -->
-        <div id="contenedor-productos">
-            <div class="producto-item" style="background: #FBF8F2; padding: 20px; border-radius: 8px; margin-top: 15px; border: 1px solid var(--gris-borde);">
-                <label style="margin-top: 0;">Producto a ingresar</label>
-                <select name="id_producto[]" required>
-                    <option value="">-- Seleccione producto --</option>
-                    {% for prod in productos %}
-                    <option value="{{ prod.id_producto }}">{{ prod.nombre }}</option>
-                    {% endfor %}
-                </select>
-                
-                <label>Cantidad</label>
-                <input type="number" name="cantidad[]" required min="1" placeholder="Ej: 45">
-                
-                <div style="display: flex; gap: 15px;">
-                    <div style="flex: 1;">
-                        <label>Fecha de elaboración</label>
-                        <input type="date" name="fecha_elaboracion[]" required>
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Fecha de vencimiento</label>
-                        <input type="date" name="fecha_vencimiento[]" required>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Botones de Acción -->
-        <button type="button" onclick="agregarProducto()" style="width: 100%; margin-top: 15px; background-color: white; color: var(--rojo-marca); border: 1px solid var(--rojo-marca);">
-            + Agregar otro producto
-        </button>
-        
-        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">
-            Ingresar pallet
-        </button>
+        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">Registrar Pallet en Base de Datos</button>
     </form>
 </div>
-
-<script>
-// Script para duplicar los campos de producto sin recargar la página
-function agregarProducto() {
-    const contenedor = document.getElementById('contenedor-productos');
-    const primerItem = contenedor.querySelector('.producto-item');
-    const nuevoItem = primerItem.cloneNode(true);
-    
-    // Limpiar los valores copiados
-    const inputs = nuevoItem.querySelectorAll('input');
-    inputs.forEach(input => input.value = '');
-    const selects = nuevoItem.querySelectorAll('select');
-    selects.forEach(select => select.value = '');
-    
-    contenedor.appendChild(nuevoItem);
-}
-</script>
 {% endblock %}
