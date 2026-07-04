@@ -44,7 +44,6 @@ def logout():
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
-    
     datos_dashboard = {
         'porcentaje_ocupacion': 0, 'ubicaciones_ocupadas': 0, 'ubicaciones_total': 0,
         'pallets_activos': 0, 'pallets_parciales': 0, 'total_entradas': 0, 'total_salidas': 0,
@@ -57,24 +56,27 @@ def dashboard():
     }
     return render_template('dashboard.html', **datos_dashboard)
 
+# --- USUARIOS CORREGIDO ---
 @app.route('/usuarios', methods=['GET', 'POST'])
 @admin_required
 def usuarios():
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    
     if request.method == 'POST':
         nombre = request.form.get('nombre')
+        usuario = request.form.get('usuario')
+        clave = request.form.get('clave')
         rol = request.form.get('rol')
         try:
-            cur.execute("INSERT INTO tbl_usuarios (nombre, rol) VALUES (%s, %s)", (nombre, rol))
+            # Ahora enviamos los 4 campos obligatorios de la tabla de PostgreSQL
+            cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol) VALUES (%s, %s, %s, %s)", 
+                        (nombre, usuario, clave, rol))
             conn.commit()
-            flash("Operador creado exitosamente")
+            flash("Personal añadido exitosamente.")
         except Exception as e:
             conn.rollback()
-            flash(f"Error de base de datos al crear: {str(e)}")
+            flash(f"Error al crear usuario: {str(e)}")
         return redirect(url_for('usuarios'))
-    
     try:
         cur.execute("SELECT * FROM tbl_usuarios ORDER BY id_usuario DESC")
         lista_usuarios = cur.fetchall()
@@ -83,9 +85,9 @@ def usuarios():
         flash(f"Error cargando usuarios: {str(e)}")
     finally:
         cur.close()
-        
     return render_template('usuarios.html', usuarios=lista_usuarios)
 
+# --- BUSCAR PALLETS CORREGIDO ---
 @app.route('/buscar_pallets', methods=['GET'])
 def buscar_pallets():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -98,21 +100,22 @@ def buscar_pallets():
             LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
             LEFT JOIN tbl_pallet_ubicacion pu ON p.id_pallet = pu.id_pallet AND pu.vigente = TRUE
             LEFT JOIN tbl_ubicaciones u ON pu.id_ubicacion = u.id_ubicacion
+            ORDER BY p.id_pallet DESC
         """)
         resultados = cur.fetchall()
     except Exception as e:
         resultados = []
-        flash(f"Error de SQL en pallets: {str(e)}")
+        flash(f"Error de base de datos en búsqueda: {str(e)}")
     finally:
         cur.close()
     return render_template('buscar_pallets.html', resultados=resultados)
 
+# --- RUTAS DE PRODUCTOS Y EMPRESAS (SIN CAMBIOS) ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    
     if request.method == 'POST':
         codigo = request.form.get('codigo')
         nombre = request.form.get('nombre')
@@ -125,16 +128,13 @@ def productos():
             conn.rollback()
             flash(f"Error al guardar producto: {str(e)}")
         return redirect(url_for('productos'))
-
     try:
         cur.execute("SELECT * FROM tbl_productos ORDER BY nombre ASC")
         lista_productos = cur.fetchall()
     except Exception as e:
         lista_productos = []
-        flash(f"Error cargando productos: {str(e)}")
     finally:
         cur.close()
-
     return render_template('productos.html', productos=lista_productos)
 
 @app.route('/empresas', methods=['GET', 'POST'])
@@ -142,7 +142,6 @@ def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
     conn = get_db()
     cur = conn.cursor(cursor_factory=RealDictCursor)
-    
     if request.method == 'POST':
         nombre = request.form.get('nombre')
         rut = request.form.get('rut')
@@ -156,32 +155,58 @@ def empresas():
             conn.rollback()
             flash(f"Error al guardar empresa: {str(e)}")
         return redirect(url_for('empresas'))
-
     try:
         cur.execute("SELECT * FROM tbl_empresas ORDER BY nombre ASC")
         lista_empresas = cur.fetchall()
     except Exception as e:
         lista_empresas = []
-        flash(f"Error cargando empresas: {str(e)}")
     finally:
         cur.close()
-
     return render_template('empresas.html', empresas=lista_empresas)
 
-# --- AQUI ESTA EL CAMBIO A PALLET_NUEVO ---
-@app.route('/pallet_nuevo')
+# --- NUEVOS MÓDULOS DE BODEGA ---
+@app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def pallet_nuevo(): 
     if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('pallet_nuevo.html')
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    if request.method == 'POST':
+        id_proveedor = request.form.get('id_proveedor')
+        codigo_qr = request.form.get('codigo_qr')
+        factura = request.form.get('factura')
+        try:
+            cur.execute("INSERT INTO tbl_pallets (id_proveedor, codigo_qr, factura) VALUES (%s, %s, %s)", 
+                        (id_proveedor, codigo_qr, factura))
+            conn.commit()
+            flash("Pallet ingresado correctamente. (Pendiente asignar posición caótica).")
+        except Exception as e:
+            conn.rollback()
+            flash(f"Error al ingresar pallet: {str(e)}")
+        return redirect(url_for('pallet_nuevo'))
+
+    try:
+        cur.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE")
+        proveedores = cur.fetchall()
+    except Exception as e:
+        proveedores = []
+    finally:
+        cur.close()
+        
+    return render_template('pallet_nuevo.html', proveedores=proveedores)
 
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
     if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('consulta_pallet.html')
 
-@app.route('/picking')
+@app.route('/picking', methods=['GET', 'POST'])
 def picking(): 
     if 'usuario' not in session: return redirect(url_for('login'))
+    if request.method == 'POST':
+        qr = request.form.get('codigo_qr')
+        flash(f"Picking registrado para el QR: {qr} (Modo prueba)")
+        return redirect(url_for('picking'))
     return render_template('picking.html')
 
 if __name__ == '__main__':
