@@ -1,206 +1,46 @@
 {% extends "base.html" %}
-{% block titulo %}Panel principal{% endblock %}
+{% block titulo %}Dashboard - HC Alimentos{% endblock %}
 {% block contenido %}
-    <h2>Panel principal</h2>
+<h2>Panel de Control</h2>
 
-    <div class="tarjetas">
-        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero">{{ porcentaje_ocupacion }}%</div><div class="etiqueta">Ocupacion bodega ({{ ubicaciones_ocupadas }}/{{ ubicaciones_total }})</div></div>
-        </a>
-        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero">{{ pallets_activos }}</div><div class="etiqueta">Pallets activos</div></div>
-        </a>
-        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero">{{ pallets_parciales }}</div><div class="etiqueta">Stock suelto en piso</div></div>
-        </a>
+<!-- Métricas de capacidad -->
+<div class="tarjetas">
+    <div class="tarjeta">
+        <div class="numero">0%</div>
+        <div class="etiqueta">Ocupación Bodega</div>
     </div>
-    <div class="tarjetas" style="margin-top:-10px;">
-        <a href="#seccion-entradas" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero" style="color:#4B7A4E;">{{ total_entradas }}</div><div class="etiqueta">Entradas (periodo)</div></div>
-        </a>
-        <a href="#seccion-entradas" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero">{{ total_salidas }}</div><div class="etiqueta">Salidas (periodo)</div></div>
-        </a>
-        <a href="{{ url_for('buscar_pallets') }}" style="text-decoration:none; flex:1; min-width:140px; display:block;">
-            <div class="tarjeta"><div class="numero" style="color:#D85A30;">{{ proximos_vencer|length }}</div><div class="etiqueta">Por vencer (7 dias)</div></div>
-        </a>
+    <div class="tarjeta">
+        <div class="numero">0</div>
+        <div class="etiqueta">Pallets Activos</div>
     </div>
+    <div class="tarjeta">
+        <div class="numero">0</div>
+        <div class="etiqueta">Entradas Hoy</div>
+    </div>
+</div>
 
-    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:8px; padding:10px 16px; margin-bottom:18px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <form method="GET" action="{{ url_for('dashboard') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%;">
-            <span style="font-size:13px; color:#5C564E;">Filtrar por fecha:</span>
-            <input type="date" name="fecha_desde" value="{{ fecha_desde }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
-            <span style="font-size:13px;">a</span>
-            <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
-            <button type="submit" style="padding:5px 14px; font-size:12px;">Filtrar</button>
-            {% if fecha_desde or fecha_hasta %}
-            <a href="{{ url_for('dashboard') }}" style="font-size:12px;">Limpiar</a>
-            {% endif %}
-        </form>
-    </div>
+<!-- Alertas Críticas (Lo solicitado por el profesor) -->
+<h3>Alertas: Productos próximos a vencer (7 días)</h3>
+<table>
+    <tr>
+        <th>Producto</th>
+        <th>Fecha de Vencimiento</th>
+        <th>Días para vencer</th>
+    </tr>
+    {% for p in proximos_vencer %}
+    <tr class="fila-vencido">
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.fecha_vencimiento }}</td>
+        <td>{{ p.dias_restantes }} días</td>
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="3" style="text-align: center; color: var(--verde-ok);">
+            ✅ No hay productos críticos en bodega.
+        </td>
+    </tr>
+    {% endfor %}
+</table>
 
-    <h3>Plano de la bodega</h3>
-    <p style="color:#5C564E; font-size:13px; margin-top:-8px;">Haz clic en cualquier rack o posicion para ver el detalle. Capacidad: {{ capacidad_pallet }} cajas/pallet.</p>
-    <div style="display:flex; gap:14px; align-items:center; font-size:12px; margin-bottom:12px; flex-wrap:wrap;">
-        <span><span style="display:inline-block; width:12px; height:12px; background:#E8F0E5; border:1px solid #C8D8C5; vertical-align:middle;"></span> Libre</span>
-        <span><span style="display:inline-block; width:12px; height:12px; background:#FCEFE2; border:1px solid #E8C9A8; vertical-align:middle;"></span> Parcial</span>
-        <span><span style="display:inline-block; width:12px; height:12px; background:#F4B795; border:1px solid #D89A78; vertical-align:middle;"></span> Mayoria</span>
-        <span><span style="display:inline-block; width:12px; height:12px; background:#C8311F; border:1px solid #8C2E1F; vertical-align:middle;"></span> Lleno</span>
-    </div>
-    <div style="background:#FFFDFA; border:1px solid var(--gris-borde); border-radius:12px; padding:20px; box-shadow:0 1px 4px rgba(45,41,37,0.08);">
-        <h3 style="margin-top:0; font-size:12px; color:#8C5A2A; letter-spacing:0.5px; text-transform:uppercase;">Racks longitudinales (R1 - R16)</h3>
-        <div style="display:grid; grid-template-columns:repeat(16, 1fr); gap:4px; margin-bottom:18px;">
-            {% for r in racks_long %}
-            <div onclick="mostrarDetalle('{{ r.nombre }}')" style="background:{{ r.color }}; color:{{ r.color_texto }}; padding:8px 2px; text-align:center; border-radius:5px; cursor:pointer; font-weight:600; font-size:11px; transition:transform 0.12s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">{{ r.nombre }}<br><span style="font-size:9px; opacity:0.85;">{{ r.ocupadas }}/{{ r.total }}</span></div>
-            {% endfor %}
-        </div>
-        <div style="display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap;">
-            <div style="flex:0 0 auto;">
-                <h3 style="margin-top:0; font-size:12px; color:#3C6B3F; letter-spacing:0.5px; text-transform:uppercase;">Produccion</h3>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px;">
-                    <div style="background:#E8F0E5; color:#3C6B3F; padding:14px 6px; text-align:center; border-radius:5px; font-weight:600; font-size:10px; border:1px solid #C8D8C5;">SALA<br>PROD 1</div>
-                    <div style="background:#E8F0E5; color:#3C6B3F; padding:14px 6px; text-align:center; border-radius:5px; font-weight:600; font-size:10px; border:1px solid #C8D8C5;">SALA<br>PROD 2</div>
-                </div>
-            </div>
-            <div style="flex:3; min-width:250px;">
-                <h3 style="margin-top:0; font-size:12px; color:#8C5A2A; letter-spacing:0.5px; text-transform:uppercase;">Zona de piso (P1 - P12)</h3>
-                <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:4px;">
-                    {% for p in piso %}
-                    <div onclick="mostrarDetallePiso('{{ p.posicion }}')" style="background:{{ p.color }}; color:{{ p.color_texto }}; padding:8px 2px; text-align:center; border-radius:5px; cursor:pointer; font-weight:600; font-size:11px; transition:transform 0.12s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">P{{ p.posicion }}<br><span style="font-size:9px; opacity:0.85;">{{ "Ocupada" if p.ocupada else "Libre" }}</span></div>
-                    {% endfor %}
-                </div>
-            </div>
-            <div style="flex:0 0 auto; min-width:110px;">
-                <h3 style="margin-top:0; font-size:12px; color:#8C5A2A; letter-spacing:0.5px; text-transform:uppercase;">Transversales</h3>
-                <div style="display:grid; grid-template-columns:1fr; gap:4px;">
-                    {% for r in racks_trans %}
-                    <div onclick="mostrarDetalle('{{ r.nombre }}')" style="background:{{ r.color }}; color:{{ r.color_texto }}; padding:8px; text-align:center; border-radius:5px; cursor:pointer; font-weight:600; font-size:11px; transition:transform 0.12s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">{{ r.nombre }} <span style="font-size:9px; opacity:0.85;">{{ r.ocupadas }}/{{ r.total }}</span></div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="detalle-rack" style="display:none; background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:20px; margin-top:14px; box-shadow:0 1px 4px rgba(45,41,37,0.10);">
-        <h3 style="margin-top:0;" id="detalle-rack-titulo"></h3>
-        <div id="detalle-rack-contenido"></div>
-        <p style="margin-top:12px;"><a href="#" onclick="document.getElementById('detalle-rack').style.display='none'; return false;">Cerrar detalle</a></p>
-    </div>
-
-    <script>
-    const racksData = {{ racks_detalle_json|safe }};
-    const pisoData = {{ piso_detalle_json|safe }};
-    function barraLlenado(cantidad, capacidad, pct) {
-        if (!cantidad) return '';
-        const colorBarra = pct >= 100 ? '#C8311F' : pct >= 51 ? '#F4B795' : '#C77F3D';
-        return '<div style="margin-top:4px;"><div style="background:#EEE7DA; border-radius:3px; height:6px; overflow:hidden;"><div style="width:' + pct + '%; height:100%; background:' + colorBarra + ';"></div></div><span style="font-size:10px; color:#5C564E;">' + cantidad + ' / ' + capacidad + ' (' + pct + '%)</span></div>';
-    }
-    function mostrarDetalle(nombreRack) {
-        const data = racksData[nombreRack]; if (!data) return;
-        document.getElementById('detalle-rack-titulo').innerText = 'Rack ' + nombreRack + ' - ' + data.ocupadas + '/' + data.total + ' posiciones ocupadas';
-        let html = '<table style="margin-top:8px;"><tr><th>Nivel</th><th>Pos 1</th><th>Pos 2</th><th>Pos 3</th></tr>';
-        ['N4','N3','N2','N1'].forEach(nivel => {
-            html += '<tr><td><strong>' + nivel + '</strong></td>';
-            ['1','2','3'].forEach(pos => {
-                const celda = data.celdas[nivel] && data.celdas[nivel][pos];
-                if (celda && celda.id_pallet) { html += '<td style="background:#FCEFE2; vertical-align:top;"><a href="#"><strong>Pallet ' + celda.id_pallet + '</strong></a><br><span style="font-size:11px; color:#5C564E;">' + (celda.proveedor || '') + '</span>' + barraLlenado(celda.cantidad, celda.capacidad, celda.pct_llenado) + '</td>';
-                } else { html += '<td style="background:#E8F0E5; color:#3C6B3F; text-align:center;">Libre</td>'; }
-            }); html += '</tr>';
-        }); html += '</table>';
-        document.getElementById('detalle-rack-contenido').innerHTML = html;
-        document.getElementById('detalle-rack').style.display = 'block';
-        document.getElementById('detalle-rack').scrollIntoView({behavior:'smooth', block:'start'});
-    }
-    function mostrarDetallePiso(posicion) {
-        const data = pisoData[posicion];
-        document.getElementById('detalle-rack-titulo').innerText = 'Zona de piso - Posicion P' + posicion;
-        let html = '';
-        if (data && data.items && data.items.length > 0) {
-            html = '<p>Stock suelto (' + data.cantidad + ' / ' + data.capacidad + ' cajas):</p>';
-            html += '<table><tr><th>Producto</th><th>Cantidad</th><th>Vencimiento</th><th>Pallet origen</th></tr>';
-            data.items.forEach(it => { html += '<tr><td>' + it.producto + '</td><td>' + it.cantidad + '</td><td>' + (it.fecha_vencimiento || '-') + '</td><td>' + (it.id_pallet ? '<a href="#">Pallet ' + it.id_pallet + '</a>' : '-') + '</td></tr>'; });
-            html += '</table>'; html += barraLlenado(data.cantidad, data.capacidad, data.pct_llenado);
-        } else { html = '<p style="color:#3C6B3F;">Posicion libre.</p>'; }
-        document.getElementById('detalle-rack-contenido').innerHTML = html;
-        document.getElementById('detalle-rack').style.display = 'block';
-        document.getElementById('detalle-rack').scrollIntoView({behavior:'smooth', block:'start'});
-    }
-    </script>
-
-    <h3 style="margin-top:28px;">Rotacion de inventario</h3>
-    <p style="color:#5C564E; font-size:13px; margin-top:-8px;">Clasificacion por frecuencia de despacho en los ultimos 30 dias.</p>
-    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:18px; box-shadow:0 1px 4px rgba(45,41,37,0.08);">
-        <div style="display:flex; height:26px; border-radius:5px; overflow:hidden; margin-bottom:10px;">
-            {% if pct_rot.Alta > 0 %}<div style="width:{{ pct_rot.Alta }}%; background:#4B7A4E; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">{{ pct_rot.Alta }}% Alta</div>{% endif %}
-            {% if pct_rot.Media > 0 %}<div style="width:{{ pct_rot.Media }}%; background:#C77F3D; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">{{ pct_rot.Media }}% Media</div>{% endif %}
-            {% if pct_rot.Baja > 0 %}<div style="width:{{ pct_rot.Baja }}%; background:#D85A30; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">{{ pct_rot.Baja }}% Baja</div>{% endif %}
-            {% if pct_rot.Sin > 0 %}<div style="width:{{ pct_rot.Sin }}%; background:#888780; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; color:white;">{{ pct_rot.Sin }}% Sin</div>{% endif %}
-        </div>
-        <div style="display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:#5C564E; margin-bottom:14px;">
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#4B7A4E; vertical-align:middle;"></span> Alta: 3+</span>
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#C77F3D; vertical-align:middle;"></span> Media: 1-2</span>
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#D85A30; vertical-align:middle;"></span> Baja: sin mov. 30d</span>
-            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#888780; vertical-align:middle;"></span> Sin rotacion</span>
-        </div>
-        {% if rotacion_lista %}
-        <div class="scroll-box">
-        <table>
-            <tr><th>Producto</th><th>Stock actual</th><th>Despachos (30d)</th><th>Rotacion</th></tr>
-            {% for r in rotacion_lista %}
-            <tr>
-                <td>{{ r.nombre }}</td><td>{{ r.stock }}</td><td>{{ r.despachos }}</td>
-                <td>{% if r.clase == 'Alta' %}<span style="background:#E8F0E5; color:#3C6B3F; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Alta</span>{% elif r.clase == 'Media' %}<span style="background:#FCEFE2; color:#8C5A2A; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Media</span>{% elif r.clase == 'Baja' %}<span style="background:#FBE9E5; color:#8C2E1F; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Baja</span>{% else %}<span style="background:#EFEAE3; color:#5C564E; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Sin rotacion</span>{% endif %}</td>
-            </tr>
-            {% endfor %}
-        </table>
-        </div>
-        {% else %}<p>No hay productos con stock o despachos registrados.</p>{% endif %}
-    </div>
-
-    <div id="seccion-entradas" style="display:flex; gap:16px; flex-wrap:wrap; margin-top:20px;">
-        <div style="flex:1; min-width:280px; background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:16px;">
-            <h3 style="margin-top:0; color:#4B7A4E; font-size:14px;">Entradas</h3>
-            {% if entradas %}
-            <div class="scroll-box">
-            <table>
-                <tr><th>Fecha</th><th>Pallet</th><th>Proveedor</th><th>Detalle</th></tr>
-                {% for e in entradas %}
-                <tr><td style="font-size:11px;">{{ e.fecha }}</td><td>{{ e.id_pallet }}</td><td>{{ e.proveedor }}</td><td style="font-size:11px;">{{ e.observacion or "-" }}</td></tr>
-                {% endfor %}
-            </table>
-            </div>
-            {% else %}<p style="font-size:13px;">Sin entradas en el periodo.</p>{% endif %}
-        </div>
-        <div style="flex:1; min-width:280px; background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:16px;">
-            <h3 style="margin-top:0; color:#C8311F; font-size:14px;">Salidas</h3>
-            {% if salidas %}
-            <div class="scroll-box">
-            <table>
-                <tr><th>Fecha</th><th>Pallet</th><th>Destino</th><th>Detalle</th></tr>
-                {% for s in salidas %}
-                <tr><td style="font-size:11px;">{{ s.fecha }}</td><td>{{ s.id_pallet }}</td>
-                <td>{% if s.destino_tipo == 'Produccion1' %}Sala prod. 1{% elif s.destino_tipo == 'Produccion2' %}Sala prod. 2{% elif s.destino_tipo == 'PlantaPrincipal' %}Planta principal{% else %}{{ s.destino_tipo or "-" }}{% endif %}</td>
-                <td style="font-size:11px;">{{ s.observacion or "-" }}</td></tr>
-                {% endfor %}
-            </table>
-            </div>
-            {% else %}<p style="font-size:13px;">Sin salidas en el periodo.</p>{% endif %}
-        </div>
-    </div>
-
-    <h3 style="margin-top:28px;">Productos proximos a vencer o ya vencidos</h3>
-    {% if proximos_vencer %}
-    <div class="scroll-box">
-    <table>
-        <tr><th>Producto</th><th>Pallet</th><th>Ubicacion</th><th>Cantidad</th><th>Vencimiento</th></tr>
-        {% for v in proximos_vencer %}
-        <tr class="{% if v.dias_para_vencer < 0 %}fila-vencido{% else %}fila-proximo{% endif %}">
-            <td>{{ v.producto }}</td><td>{{ v.id_pallet }}</td>
-            <td>{% if v.rack %}{{ v.rack }}-{{ v.nivel }}-{{ v.posicion }}{% else %}-{% endif %}</td>
-            <td>{{ v.cantidad }}</td><td>{{ v.fecha_vencimiento }} {% if v.dias_para_vencer < 0 %}(vencido){% else %}(en {{ v.dias_para_vencer }} dias){% endif %}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    </div>
-    {% else %}<p>No hay productos venciendo en los proximos 7 dias.</p>{% endif %}
+<!-- Aquí podrías agregar más secciones de métricas si el profesor lo requiere -->
 {% endblock %}
