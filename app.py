@@ -26,7 +26,7 @@ def login():
             cur.close()
             conn.close()
             
-            # Ingreso directo garantizado
+            # Ingreso directo garantizado con admin123
             if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session['usuario'] = user['usuario']
                 session['nombre'] = user['nombre']
@@ -63,7 +63,7 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- INGRESAR PALLET ---
+# --- GESTIÓN DE PALLETS ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def gestionar_pallet_nuevo():
@@ -78,13 +78,14 @@ def gestionar_pallet_nuevo():
             conn.commit()
         
         try:
-            cur.execute("SELECT id_proveedor, nombre FROM tbl_proveedores")
+            # Ahora leemos de tbl_empresas filtrando por proveedores
+            cur.execute("SELECT id_empresa as id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = True AND activo = True")
             provs = cur.fetchall()
         except:
             conn.rollback()
             
         try:
-            cur.execute("SELECT id_producto, nombre FROM tbl_productos")
+            cur.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = True")
             prods = cur.fetchall()
         except:
             conn.rollback()
@@ -96,7 +97,7 @@ def gestionar_pallet_nuevo():
         
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- REGISTRO DE EMPRESAS (SOLUCIÓN 500/405) ---
+# --- GESTIÓN DE EMPRESAS ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -106,30 +107,53 @@ def empresas():
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
         if request.method == 'POST':
-            # Captura de datos flexible (soporta si el input se llama 'nombre' o 'razon_social')
-            nombre = request.form.get('nombre') or request.form.get('razon_social')
+            nombre = request.form.get('nombre')
             rut = request.form.get('rut', '')
             telefono = request.form.get('telefono', '')
-            contacto = request.form.get('contacto', '')
+            correo = request.form.get('correo', '')
+            direccion = request.form.get('direccion', '')
+            es_proveedor = 'es_proveedor' in request.form
+            es_cliente = 'es_cliente' in request.form
             
-            # Solo guardamos si el formulario envió realmente un nombre
             if nombre:
-                cur.execute(
-                    "INSERT INTO tbl_proveedores (nombre, rut, telefono, contacto) VALUES (%s, %s, %s, %s)", 
-                    (nombre, rut, telefono, contacto)
-                )
+                cur.execute("""
+                    INSERT INTO tbl_empresas 
+                    (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente, activo) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, True)
+                """, (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente))
                 conn.commit()
                 
-        cur.execute("SELECT * FROM tbl_proveedores")
+        cur.execute("SELECT * FROM tbl_empresas ORDER BY id_empresa DESC")
         lista = cur.fetchall()
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"Error crítico en empresas: {e}")
+        print(f"Error en empresas: {e}")
         
     return render_template('empresas.html', empresas=lista)
 
-# --- RESTO DE RUTAS ---
+@app.route('/editar_empresa/<int:id_empresa>', methods=['GET', 'POST'])
+def editar_empresa(id_empresa):
+    if 'usuario' not in session: return redirect(url_for('login'))
+    # Redirección de seguridad. La lógica del formulario de edición se puede agregar después.
+    return redirect(url_for('empresas'))
+
+@app.route('/eliminar_empresa/<int:id_empresa>')
+def eliminar_empresa(id_empresa):
+    if 'usuario' not in session: return redirect(url_for('login'))
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Soft delete: desactiva en lugar de borrar para mantener el historial
+        cur.execute("UPDATE tbl_empresas SET activo = False WHERE id_empresa = %s", (id_empresa,))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error al eliminar empresa: {e}")
+    return redirect(url_for('empresas'))
+
+# --- PRODUCTOS Y USUARIOS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -169,6 +193,7 @@ def usuarios():
         print(f"Error en usuarios: {e}")
     return render_template('usuarios.html', usuarios=lista)
 
+# --- NAVEGACIÓN COMPLEMENTARIA ---
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
     if 'usuario' not in session: return redirect(url_for('login'))
