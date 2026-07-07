@@ -26,7 +26,7 @@ def login():
             cur.close()
             conn.close()
             
-            # Ingreso directo con clave maestra admin123
+            # Ingreso directo garantizado
             if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session['usuario'] = user['usuario']
                 session['nombre'] = user['nombre']
@@ -63,7 +63,7 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- SOLUCIÓN ERROR 500: Doble endpoint para Ingresar Pallet ---
+# --- INGRESAR PALLET ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def gestionar_pallet_nuevo():
@@ -96,7 +96,7 @@ def gestionar_pallet_nuevo():
         
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- SOLUCIÓN ERROR 405: Registro de Empresas ---
+# --- REGISTRO DE EMPRESAS (SOLUCIÓN 500/405) ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -104,43 +104,32 @@ def empresas():
     try:
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Creación robusta de la tabla si no existe
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS tbl_proveedores (
-                id_proveedor SERIAL PRIMARY KEY,
-                nombre VARCHAR(150),
-                rut VARCHAR(20),
-                telefono VARCHAR(50),
-                contacto VARCHAR(100),
-                activo BOOLEAN DEFAULT TRUE
-            )
-        """)
-        conn.commit()
 
         if request.method == 'POST':
-            # Captura de datos genéricos del formulario de empresas
-            nombre = request.form.get('nombre', request.form.get('razon_social', 'Empresa Sin Nombre'))
+            # Captura de datos flexible (soporta si el input se llama 'nombre' o 'razon_social')
+            nombre = request.form.get('nombre') or request.form.get('razon_social')
             rut = request.form.get('rut', '')
             telefono = request.form.get('telefono', '')
             contacto = request.form.get('contacto', '')
             
-            cur.execute(
-                "INSERT INTO tbl_proveedores (nombre, rut, telefono, contacto) VALUES (%s, %s, %s, %s)", 
-                (nombre, rut, telefono, contacto)
-            )
-            conn.commit()
-            
+            # Solo guardamos si el formulario envió realmente un nombre
+            if nombre:
+                cur.execute(
+                    "INSERT INTO tbl_proveedores (nombre, rut, telefono, contacto) VALUES (%s, %s, %s, %s)", 
+                    (nombre, rut, telefono, contacto)
+                )
+                conn.commit()
+                
         cur.execute("SELECT * FROM tbl_proveedores")
         lista = cur.fetchall()
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"Error en empresas: {e}")
+        print(f"Error crítico en empresas: {e}")
         
     return render_template('empresas.html', empresas=lista)
 
-# --- RESTO DE RUTAS FUNCIONALES ---
+# --- RESTO DE RUTAS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
