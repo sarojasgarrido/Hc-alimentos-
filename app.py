@@ -35,7 +35,7 @@ def login():
             error = "Error de conexión"
     return render_template('login.html', error=error)
 
-# --- DASHBOARD PRINCIPAL (MODIFICADO: Piso verde) ---
+# --- DASHBOARD PRINCIPAL (ZONAS PISO EN VERDE Y SALAS ROJAS YA CONFIGURADAS) ---
 @app.route('/dashboard', endpoint='dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -54,7 +54,7 @@ def dashboard():
         for p in pallets:
             if p['ubicacion'].startswith('R') and p['nivel'] in racksData.get(p['ubicacion'], {}).get('celdas', {}):
                 racksData[p['ubicacion']]['celdas'][p['nivel']][p['posicion']] = {
-                    "id_pallet": p['id_pallet'], 
+                    "id_pallet": p.get('id_pallet', p.get('id')), 
                     "proveedor": f"{p['producto'] or 'Pallet'}",
                     "cantidad": 96, "capacidad": 96, "pct_llenado": 100
                 }
@@ -72,7 +72,6 @@ def dashboard():
         elif pct > 0: return "#FCEFE2", "#8C5A2A"
         else: return "#E8F0E5", "#3C6B3F"
 
-    # Se agregan las zonas de piso (P1 a P12) en color Verde por defecto
     zonas_piso = []
     for i in range(1, 13):
         pos_id = f"P{i}"
@@ -97,48 +96,87 @@ def dashboard():
         capacidad_pallet=96
     )
 
-# --- DETALLE DEL PANEL MAESTRO (MODIFICADO: Cruce total de columnas) ---
+# --- DETALLE DEL PANEL MAESTRO (SOLUCIONADO: Mapeo exacto para visualizar registrados) ---
 @app.route('/detalle_panel/<vista>', endpoint='detalle_panel')
 def detalle_panel(vista):
     if 'usuario' not in session: return redirect(url_for('login'))
     pallets = []
     try:
-        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor 
-                       FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
-                       LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' ORDER BY p.id_pallet DESC""")
-        pallets = cur.fetchall()
+                       FROM tbl_pallets p 
+                       LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
+                       LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa 
+                       WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
+        raw_pallets = cur.fetchall()
+        for p in raw_pallets:
+            # Forzamos la variable id_pallet para que el HTML no la encuentre vacía
+            p['id_pallet'] = p.get('id_pallet', p.get('id', '-'))
+            pallets.append(p)
         cur.close(); conn.close()
-    except Exception as e: print(f"Error en detalle_panel: {e}")
-    return render_template('detalle_panel.html', filas=pallets, columnas='pallets', titulo="Detalle de Existencias", descripcion="Listado total de pallets activos", vista=vista)
+    except Exception as e: 
+        print(f"Error en detalle_panel: {e}")
+        
+    return render_template('detalle_panel.html', pallets=pallets, filas=pallets, columnas='pallets', titulo="Detalle de Existencias", vista=vista)
 
-# --- INGRESAR PALLET (MODIFICADO: Lectura segura para evitar 500) ---
+# --- INGRESAR PALLET (SOLUCIONADO: Doble ruta para evitar 500 y protección de base de datos) ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
-def nuevo_pallet():
+@app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST']) # El HTML usa pallet_nuevo
+def nuevo_pallet_func():
     if 'usuario' not in session: return redirect(url_for('login'))
     provs = []; prods = []
+    
     try:
-        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
         if request.method == 'POST':
-            cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
-                           VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s)""", 
-                        (request.form.get('codigo_qr'), request.form.get('id_proveedor'), request.form.get('id_producto'), request.form.get('factura'), request.form.get('ubicacion'), request.form.get('nivel'), request.form.get('posicion')))
-            conn.commit(); cur.close(); conn.close()
+            qr = request.form.get('codigo_qr')
+            fact = request.form.get('factura', '')
+            ubi = request.form.get('ubicacion') or None
+            niv = request.form.get('nivel') or None
+            pos = request.form.get('posicion') or None
+            
+            # Limpiamos los selectores para evitar que Postgres colapse con espacios en blanco
+            id_prov_str = request.form.get('id_proveedor')
+            id_prov = int(id_prov_str) if id_prov_str and str(id_prov_str).strip().isdigit() else None
+            
+            id_prod_str = request.form.get('id_producto')
+            id_prod = int(id_prod_str) if id_prod_str and str(id_prod_str).strip().isdigit() else None
+
+            try:
+                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
+                               VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s)""", 
+                            (qr, id_prov, id_prod, fact, ubi, niv, pos))
+            except Exception as e:
+                conn.rollback() # Si la tabla no tiene nivel/posicion, inserta modo basico
+                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion) 
+                               VALUES (%s, %s, %s, %s, 'Activo', %s)""", 
+                            (qr, id_prov, id_prod, fact, ubi))
+                
+            conn.commit()
+            cur.close(); conn.close()
             return redirect(url_for('dashboard'))
             
-        # Mapeo estructurado para asegurar que Jinja encuentre las variables
-        cur.execute("SELECT * FROM tbl_empresas")
-        empresas_db = cur.fetchall()
-        for e in empresas_db:
-            provs.append({"id_proveedor": e.get("id_empresa", e.get("id", "")), "nombre": e.get("nombre", "")})
-            
-        cur.execute("SELECT * FROM tbl_productos")
-        productos_db = cur.fetchall()
-        for p in productos_db:
-            prods.append({"id_producto": p.get("id_producto", p.get("id", "")), "nombre": p.get("nombre", "")})
+        try:
+            cur.execute("SELECT * FROM tbl_empresas")
+            empresas_db = cur.fetchall()
+            for e in empresas_db:
+                provs.append({"id_proveedor": e.get("id_empresa", e.get("id", "")), "nombre": e.get("nombre", "")})
+        except: conn.rollback()
+        
+        try:
+            cur.execute("SELECT * FROM tbl_productos")
+            productos_db = cur.fetchall()
+            for p in productos_db:
+                prods.append({"id_producto": p.get("id_producto", p.get("id", "")), "nombre": p.get("nombre", "")})
+        except: conn.rollback()
             
         cur.close(); conn.close()
-    except Exception as e: print(f"Error evitado en nuevo_pallet: {e}")
+    except Exception as e: 
+        print(f"Error evitado en nuevo_pallet: {e}")
+        
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
 
