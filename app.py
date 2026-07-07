@@ -2,7 +2,7 @@ import os
 import psycopg2
 import json
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -11,7 +11,7 @@ app.secret_key = 'hc_alimentos_secret_2026'
 def get_db():
     return psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
 
-# --- AUTENTICACIÓN ---
+# --- AUTENTICACIÓN (RESTAURADA) ---
 @app.route('/', methods=['GET', 'POST'], endpoint='login')
 def login():
     error = None
@@ -24,11 +24,16 @@ def login():
             cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s", (usuario,))
             user = cur.fetchone()
             cur.close(); conn.close()
-            if user and (clave == "admin123" or user['clave'] == clave):
+            
+            # Restaurada la validación de hash
+            if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session.update({'usuario': user['usuario'], 'nombre': user['nombre'], 'rol': user['rol']})
                 return redirect(url_for('dashboard'))
-            else: error = "Usuario o clave incorrectos"
-        except Exception as e: print(f"Login error: {e}")
+            else:
+                error = "Usuario o clave incorrectos"
+        except Exception as e: 
+            print(f"Login error: {e}")
+            error = "Error de conexión"
     return render_template('login.html', error=error)
 
 # --- DASHBOARD PRINCIPAL ---
@@ -36,7 +41,6 @@ def login():
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
     
-    # Racks 1-20
     racksData = {f"R{i}": {"ocupadas": 0, "total": 12, "celdas": {"N4": {"1":None,"2":None,"3":None}, "N3": {"1":None,"2":None,"3":None}, "N2": {"1":None,"2":None,"3":None}, "N1": {"1":None,"2":None,"3":None}}} for i in range(1, 21)}
     
     try:
@@ -53,7 +57,6 @@ def dashboard():
         cur.close(); conn.close()
     except Exception as e: print(f"Error dashboard: {e}")
 
-    # Retornamos todas las variables que espera dashboard.html para evitar UndefinedError
     return render_template('dashboard.html', 
         racks_detalle_json=json.dumps(racksData),
         racks_long=[{"nombre": f"R{i}", "ocupadas": racksData[f"R{i}"]["ocupadas"]} for i in range(1,17)],
@@ -67,7 +70,7 @@ def dashboard():
         capacidad_pallet=96
     )
 
-# --- RUTAS DE NAVEGACIÓN COMPLETAS (EVITAN BUILD ERROR) ---
+# --- RUTAS DE GESTIÓN Y MANTENEDORES ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 def nuevo_pallet():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -81,15 +84,6 @@ def nuevo_pallet():
     cur.close(); conn.close()
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-@app.route('/consulta_pallet', endpoint='consulta_pallet')
-def consulta_pallet(): return render_template('consulta_pallet.html')
-
-@app.route('/buscar_pallets', endpoint='buscar_pallets')
-def buscar_pallets(): return render_template('buscar_pallets.html')
-
-@app.route('/picking', endpoint='picking')
-def picking(): return render_template('picking.html')
-
 @app.route('/pallets/detalle/<int:id_pallet>', endpoint='ver_pallet')
 def ver_pallet(id_pallet):
     conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -97,13 +91,6 @@ def ver_pallet(id_pallet):
     pallet = cur.fetchone(); cur.close(); conn.close()
     return render_template('pallet_detalle.html', pallet=pallet or {}, items=[pallet] if pallet else [])
 
-@app.route('/pallets/despachar/<int:id_pallet>', endpoint='despachar_pallet', methods=['POST'])
-def despachar_pallet(id_pallet):
-    conn = get_db(); cur = conn.cursor()
-    cur.execute("UPDATE tbl_pallets SET estado = 'Despachado', ubicacion = NULL WHERE id_pallet = %s", (id_pallet,))
-    conn.commit(); conn.close(); return redirect(url_for('dashboard'))
-
-# --- MANTENEDORES ---
 @app.route('/empresas', endpoint='empresas', methods=['GET', 'POST'])
 def empresas():
     conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -128,13 +115,29 @@ def productos():
 def usuarios():
     conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
     if request.method == 'POST':
-        cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave) VALUES (%s, %s, %s)", (request.form.get('nombre'), request.form.get('usuario'), "123"))
+        # En el registro de usuario debemos encriptar la clave
+        clave_hash = generate_password_hash(request.form.get('clave'))
+        cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave) VALUES (%s, %s, %s)", (request.form.get('nombre'), request.form.get('usuario'), clave_hash))
         conn.commit()
     cur.execute("SELECT * FROM tbl_usuarios"); lista = cur.fetchall()
     cur.close(); conn.close()
     return render_template('usuarios.html', usuarios=lista)
 
-# --- RUTAS RESTANTES ---
+# --- RUTAS DE APOYO Y SEGURIDAD ---
+@app.route('/pallets/despachar/<int:id_pallet>', endpoint='despachar_pallet', methods=['POST'])
+def despachar_pallet(id_pallet):
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("UPDATE tbl_pallets SET estado = 'Despachado', ubicacion = NULL WHERE id_pallet = %s", (id_pallet,))
+    conn.commit(); conn.close(); return redirect(url_for('dashboard'))
+
+@app.route('/consulta_pallet', endpoint='consulta_pallet')
+def consulta_pallet(): return render_template('consulta_pallet.html')
+@app.route('/buscar_pallets', endpoint='buscar_pallets')
+def buscar_pallets(): return render_template('buscar_pallets.html')
+@app.route('/picking', endpoint='picking')
+def picking(): return render_template('picking.html')
+@app.route('/detalle_panel/<vista>', endpoint='detalle_panel')
+def detalle_panel(vista): return redirect(url_for('dashboard'))
 @app.route('/pallets/descargar_qr/<int:id_pallet>', endpoint='descargar_qr')
 def descargar_qr(id_pallet): return "En desarrollo"
 @app.route('/pallets/historial/<int:id_pallet>', endpoint='historial_pallet')
