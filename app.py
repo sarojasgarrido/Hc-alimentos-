@@ -2,8 +2,8 @@ import os
 import psycopg2
 import json
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, session, flash
-from werkzeug.security import generate_password_hash
+from flask import Flask, render_template, request, redirect, url_for, session
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = 'hc_alimentos_secret_2026'
@@ -14,13 +14,29 @@ def get_db():
 # --- AUTENTICACIÓN ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
+    error = None
     if request.method == 'POST':
-        # Validación: si el usuario hace POST, redirige al dashboard
-        session['usuario'] = request.form.get('usuario')
-        session['nombre'] = "Administrador"
-        session['rol'] = "Administrador"
-        return redirect(url_for('dashboard'))
-    return render_template('login.html')
+        usuario = request.form.get('usuario')
+        clave = request.form.get('clave')
+        try:
+            conn = get_db()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s", (usuario,))
+            user = cur.fetchone()
+            cur.close(); conn.close()
+            
+            if user and check_password_hash(user['clave'], clave):
+                session['usuario'] = user['usuario']
+                session['nombre'] = user['nombre']
+                session['rol'] = user['rol']
+                return redirect(url_for('dashboard'))
+            else:
+                error = "Usuario o clave incorrectos"
+        except Exception as e:
+            error = "Error de conexión con la base de datos"
+            print(f"Error login: {e}")
+            
+    return render_template('login.html', error=error)
 
 @app.route('/logout')
 def logout():
@@ -45,7 +61,7 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- NAVEGACIÓN Y GESTIÓN ---
+# --- GESTIÓN DE PALLETS ---
 @app.route('/pallet_nuevo', methods=['GET', 'POST'])
 def pallet_nuevo():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -62,6 +78,7 @@ def pallet_nuevo():
     cur.close(); conn.close()
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
+# --- OTRAS RUTAS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     conn = get_db()
@@ -89,7 +106,6 @@ def usuarios():
     cur.close(); conn.close()
     return render_template('usuarios.html', usuarios=lista)
 
-# --- RUTAS DE NAVEGACIÓN COMPLEMENTARIAS ---
 @app.route('/detalle_panel/<vista>')
 def detalle_panel(vista): return render_template('detalle_panel.html', titulo=vista)
 @app.route('/consulta_pallet')
