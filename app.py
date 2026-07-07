@@ -26,6 +26,7 @@ def login():
             cur.close()
             conn.close()
             
+            # Ingreso directo garantizado con admin123
             if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session['usuario'] = user['usuario']
                 session['nombre'] = user['nombre']
@@ -44,66 +45,72 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD (AHORA ES DINÁMICO) ---
+# --- DASHBOARD (MAPA VISUAL VERDE/ROJO) ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
+    
+    activos = 0
+    ubicaciones_ocupadas_bd = []
     
     try:
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Aseguramos que la tabla exista para que no arroje error 500
+        # Validamos columnas para evitar 500
         cur.execute("""
             CREATE TABLE IF NOT EXISTS tbl_pallets (
                 id_pallet SERIAL PRIMARY KEY,
+                codigo_qr VARCHAR(100),
                 id_proveedor INTEGER,
                 factura VARCHAR(50),
                 estado VARCHAR(20) DEFAULT 'Activo',
                 ubicacion VARCHAR(50)
             )
         """)
-        # Forzamos la columna ubicación si no existía
-        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS ubicacion VARCHAR(50)")
         conn.commit()
 
-        # Contamos pallets activos
-        cur.execute("SELECT COUNT(*) as activos FROM tbl_pallets WHERE estado = 'Activo'")
-        activos = cur.fetchone()['activos']
-
-        # Buscamos qué ubicaciones están ocupadas
+        # Extraemos las ubicaciones ocupadas
         cur.execute("SELECT ubicacion FROM tbl_pallets WHERE estado = 'Activo' AND ubicacion IS NOT NULL")
-        ubicaciones_bd = [r['ubicacion'] for r in cur.fetchall()]
+        ubicaciones_ocupadas_bd = [r['ubicacion'] for r in cur.fetchall()]
+        activos = len(ubicaciones_ocupadas_bd)
         
         cur.close()
         conn.close()
     except Exception as e:
         print(f"Error en dashboard: {e}")
-        activos = 0
-        ubicaciones_bd = []
 
-    # Construcción del Plano de la Bodega (Basado en tu imagen)
-    racks_long = []
-    for i in range(1, 17):
-        rack_id = f"R{i}"
-        racks_long.append({"id": rack_id, "estado": "Lleno" if rack_id in ubicaciones_bd else "Libre"})
+    # LÓGICA DE COLORES: Verde libre, Rojo ocupado
+    def generar_color_rack(id_rack):
+        ocupado = id_rack in ubicaciones_ocupadas_bd
+        return {
+            "nombre": id_rack,
+            "ocupadas": 96 if ocupado else 0,
+            "total": 96,
+            "color": "#C8311F" if ocupado else "#E8F0E5",
+            "color_texto": "white" if ocupado else "#3C6B3F"
+        }
 
+    # Generación de estructuras de bodega
+    racks_long = [generar_color_rack(f"R{i}") for i in range(1, 17)]
+    
     piso = []
     for i in range(1, 13):
-        piso_id = f"P{i}"
-        piso.append({"id": piso_id, "estado": "Ocupado" if piso_id in ubicaciones_bd else "Libre"})
+        id_piso = f"P{i}"
+        ocupado = id_piso in ubicaciones_ocupadas_bd
+        piso.append({
+            "posicion": str(i),
+            "ocupada": ocupado,
+            "color": "#C8311F" if ocupado else "#E8F0E5",
+            "color_texto": "white" if ocupado else "#3C6B3F"
+        })
 
-    racks_trans = []
-    for i in range(17, 20):
-        rack_id = f"R{i}"
-        racks_trans.append({"id": rack_id, "estado": "Lleno" if rack_id in ubicaciones_bd else "Libre"})
-
-    ubicaciones_ocupadas = len(ubicaciones_bd)
+    racks_trans = [generar_color_rack(f"R{i}") for i in range(17, 21)]
     
     context = {
-        'porcentaje_ocupacion': round((ubicaciones_ocupadas / 240.0) * 100, 1) if ubicaciones_ocupadas else 0.0,
-        'ubicaciones_ocupadas': ubicaciones_ocupadas,
-        'ubicaciones_total': 240, # Asumiendo 240 posiciones totales según tu panel
+        'porcentaje_ocupacion': round((activos / 240.0) * 100, 1) if activos else 0.0,
+        'ubicaciones_ocupadas': activos,
+        'ubicaciones_total': 240,
         'pallets_activos': activos,
         'pallets_parciales': 0,
         'total_entradas': activos,
@@ -122,7 +129,7 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- INGRESAR PALLET (AHORA REDIRIGE Y DA FEEDBACK) ---
+# --- INGRESAR PALLET ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def gestionar_pallet_nuevo():
@@ -132,40 +139,32 @@ def gestionar_pallet_nuevo():
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Validación de seguridad estructural
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS tbl_pallets (
-                id_pallet SERIAL PRIMARY KEY,
-                id_proveedor INTEGER,
-                factura VARCHAR(50),
-                estado VARCHAR(20) DEFAULT 'Activo',
-                ubicacion VARCHAR(50)
-            )
-        """)
+        # Validar estructura y agregar columnas de tu nuevo HTML si no existen
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS codigo_qr VARCHAR(100)")
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS ubicacion VARCHAR(50)")
         conn.commit()
 
         if request.method == 'POST':
-            # Capturamos la ubicación si es que tu formulario ya la envía
-            ubicacion = request.form.get('ubicacion', None)
+            codigo_qr = request.form.get('codigo_qr')
+            id_proveedor = request.form.get('id_proveedor')
+            factura = request.form.get('factura')
+            ubicacion = request.form.get('ubicacion')
             
+            # Guardamos el pallet con su ubicación y código QR
             cur.execute("""
-                INSERT INTO tbl_pallets (id_proveedor, factura, estado, ubicacion) 
-                VALUES (%s, %s, 'Activo', %s)
-            """, (request.form.get('id_proveedor'), request.form.get('factura'), ubicacion))
+                INSERT INTO tbl_pallets (codigo_qr, id_proveedor, factura, estado, ubicacion) 
+                VALUES (%s, %s, %s, 'Activo', %s)
+            """, (codigo_qr, id_proveedor, factura, ubicacion))
             conn.commit()
             
-            # MAGIA AQUÍ: Te devuelve al panel para que veas el resultado de inmediato
+            # Redirección inmediata al dashboard para ver el mapa
             return redirect(url_for('dashboard'))
         
         try:
             cur.execute("SELECT id_empresa as id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = True AND activo = True")
             provs = cur.fetchall()
-        except: pass
-            
-        try:
-            cur.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = True")
-            prods = cur.fetchall()
-        except: pass
+        except:
+            pass
             
         cur.close()
         conn.close()
