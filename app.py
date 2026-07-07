@@ -44,7 +44,7 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD (AHORA CON DETALLE EXACTO POR CELDA) ---
+# --- DASHBOARD PRINCIPAL ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -53,7 +53,7 @@ def dashboard():
     ubicaciones_ocupadas_bd = []
     racksData = {}
     
-    # 1. Preparamos el esqueleto de 20 Racks x 4 Niveles x 3 Posiciones
+    # Preparamos el esqueleto de 20 Racks x 4 Niveles x 3 Posiciones
     for i in range(1, 21):
         racksData[f"R{i}"] = {
             "ocupadas": 0,
@@ -70,7 +70,6 @@ def dashboard():
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Validamos estructura de base de datos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS tbl_pallets (
                 id_pallet SERIAL PRIMARY KEY,
@@ -86,7 +85,7 @@ def dashboard():
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS posicion VARCHAR(10)")
         conn.commit()
 
-        # 2. Consultamos la ubicación exacta uniendo productos y empresas
+        # Consultamos la ubicación exacta
         cur.execute("""
             SELECT p.id_pallet, p.ubicacion, p.nivel, p.posicion, 
                    pr.nombre as producto, e.nombre as proveedor
@@ -103,12 +102,9 @@ def dashboard():
             nivel = p['nivel']
             pos = p['posicion']
             
-            # Llenamos la celda específica si es un Rack
             if rack.startswith('R') and rack in racksData and nivel and pos:
                 if nivel in racksData[rack]['celdas'] and pos in racksData[rack]['celdas'][nivel]:
-                    # Unimos Producto y Proveedor para que se muestre hermoso en el cuadro
                     etiqueta_detalle = f"<span style='color:#C8311F;'>{p['producto'] or 'Pallet'}</span><br>{p['proveedor'] or ''}"
-                    
                     racksData[rack]['celdas'][nivel][pos] = {
                         "id_pallet": p['id_pallet'],
                         "proveedor": etiqueta_detalle,
@@ -124,7 +120,6 @@ def dashboard():
     except Exception as e:
         print(f"Error en dashboard: {e}")
 
-    # 3. Lógica dinámica de colores según % de ocupación
     def generar_color_rack(id_rack):
         ocupadas = racksData.get(id_rack, {}).get("ocupadas", 0)
         pct = (ocupadas / 12.0) * 100
@@ -163,7 +158,58 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- INGRESAR PALLET (Recibe coordenadas exactas) ---
+# --- RUTAS DE TRAZABILIDAD (NUEVA FUNCIÓN INTEGRADORA) ---
+@app.route('/detalle_panel/<vista>')
+def detalle_panel(vista): 
+    if 'usuario' not in session: return redirect(url_for('login'))
+    
+    lista_pallets = []
+    titulo = "Detalle de Trazabilidad"
+    
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Consulta base que cruza pallets, productos y empresas para tener el dato completo
+        base_query = """
+            SELECT p.id_pallet, p.codigo_qr, p.factura, p.estado, p.ubicacion, p.nivel, p.posicion,
+                   pr.nombre as producto, e.nombre as proveedor
+            FROM tbl_pallets p
+            LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto
+            LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+        """
+        
+        # Filtramos dinámicamente según la tarjeta que pinchó el usuario
+        if vista == 'activos':
+            titulo = "Total de Pallets Activos en Bodega"
+            cur.execute(base_query + " WHERE p.estado = 'Activo' ORDER BY p.id_pallet DESC")
+            
+        elif vista == 'ocupacion':
+            titulo = "Desglose de Ocupación Física"
+            cur.execute(base_query + " WHERE p.estado = 'Activo' AND p.ubicacion IS NOT NULL ORDER BY p.ubicacion ASC")
+            
+        elif vista == 'parciales':
+            titulo = "Stock Suelto en Zona de Piso"
+            cur.execute(base_query + " WHERE p.estado = 'Activo' AND p.ubicacion LIKE 'P%' ORDER BY p.id_pallet DESC")
+            
+        elif vista == 'por_vencer':
+            titulo = "Pallets Próximos a Vencer"
+            cur.execute(base_query + " WHERE p.estado = 'Activo' ORDER BY p.id_pallet ASC LIMIT 20")
+            
+        else:
+            titulo = f"Trazabilidad: {vista.capitalize()}"
+            cur.execute(base_query + " ORDER BY p.id_pallet DESC LIMIT 50")
+            
+        lista_pallets = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error en trazabilidad detalle_panel: {e}")
+        
+    return render_template('detalle_panel.html', titulo=titulo, pallets=lista_pallets, vista=vista)
+
+
+# --- INGRESAR PALLET ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def gestionar_pallet_nuevo():
@@ -206,7 +252,7 @@ def gestionar_pallet_nuevo():
         
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- RESTO DE FUNCIONES ESTANDARIZADAS ---
+# --- GESTIÓN DE EMPRESAS ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -259,6 +305,7 @@ def eliminar_empresa(id_empresa):
     except Exception as e: pass
     return redirect(url_for('empresas'))
 
+# --- PRODUCTOS Y USUARIOS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -296,6 +343,7 @@ def usuarios():
     except Exception as e: pass
     return render_template('usuarios.html', usuarios=lista)
 
+# --- NAVEGACIÓN COMPLEMENTARIA ---
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -310,11 +358,6 @@ def buscar_pallets():
 def picking(): 
     if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('picking.html')
-
-@app.route('/detalle_panel/<vista>')
-def detalle_panel(vista): 
-    if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('detalle_panel.html', titulo=vista)
 
 @app.route('/pallets/detalle/<int:id_pallet>')
 def ver_pallet(id_pallet): 
