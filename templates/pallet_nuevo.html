@@ -10,6 +10,14 @@
         <label>Código QR del Pallet</label>
         <input type="text" name="codigo_qr" required placeholder="Escanee la etiqueta (Ej: QR-HC-9823)">
         
+        <label>Producto Contenido</label>
+        <select name="id_producto" required>
+            <option value="">-- Seleccione el producto --</option>
+            {% for prod in productos %}
+            <option value="{{ prod.id_producto }}">{{ prod.nombre }}</option>
+            {% endfor %}
+        </select>
+
         <label>Empresa Proveedora</label>
         <select name="id_proveedor" required>
             <option value="">-- Seleccione el proveedor --</option>
@@ -20,7 +28,7 @@
 
         <label>Ubicación en Bodega</label>
         <select name="ubicacion" required>
-            <option value="">-- Asigne una ubicación (Rack o Piso) --</option>
+            <option value="">-- Asigne Rack o Piso --</option>
             <optgroup label="Racks Longitudinales">
                 {% for i in range(1, 17) %}
                 <option value="R{{ i }}">Rack R{{ i }}</option>
@@ -38,10 +46,32 @@
             </optgroup>
         </select>
         
+        <div style="display:flex; gap:10px; margin-top:4px;">
+            <div style="flex:1;">
+                <label>Nivel (Si es Rack)</label>
+                <select name="nivel">
+                    <option value="">-- Nivel --</option>
+                    <option value="N1">Nivel 1 (Base)</option>
+                    <option value="N2">Nivel 2</option>
+                    <option value="N3">Nivel 3</option>
+                    <option value="N4">Nivel 4 (Tope)</option>
+                </select>
+            </div>
+            <div style="flex:1;">
+                <label>Posición</label>
+                <select name="posicion">
+                    <option value="">-- Espacio --</option>
+                    <option value="1">Espacio 1 (Izq)</option>
+                    <option value="2">Espacio 2 (Centro)</option>
+                    <option value="3">Espacio 3 (Der)</option>
+                </select>
+            </div>
+        </div>
+        
         <label>Documento / Factura (Opcional)</label>
         <input type="text" name="factura" placeholder="Ej: Factura N° 14592">
         
-        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">Registrar Pallet y Asignar Ubicación</button>
+        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">Registrar Pallet en Ubicación Exacta</button>
     </form>
 </div>
 {% endblock %}
