@@ -35,7 +35,7 @@ def login():
             error = "Error de conexión"
     return render_template('login.html', error=error)
 
-# --- DASHBOARD PRINCIPAL (ZONAS PISO EN VERDE Y SALAS ROJAS YA CONFIGURADAS) ---
+# --- DASHBOARD PRINCIPAL (SOLUCIONADO: Mapeo estricto para pintar el Rack) ---
 @app.route('/dashboard', endpoint='dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -53,12 +53,15 @@ def dashboard():
         pallets = cur.fetchall()
         for p in pallets:
             if p['ubicacion'].startswith('R') and p['nivel'] in racksData.get(p['ubicacion'], {}).get('celdas', {}):
-                racksData[p['ubicacion']]['celdas'][p['nivel']][p['posicion']] = {
-                    "id_pallet": p.get('id_pallet', p.get('id')), 
-                    "proveedor": f"{p['producto'] or 'Pallet'}",
-                    "cantidad": 96, "capacidad": 96, "pct_llenado": 100
-                }
-                racksData[p['ubicacion']]["ocupadas"] += 1
+                # Forzamos que la posición sea un texto para que coincida exactamente con las llaves del JSON (1, 2, 3)
+                pos_str = str(p['posicion']) if p['posicion'] is not None else None
+                if pos_str in racksData[p['ubicacion']]['celdas'][p['nivel']]:
+                    racksData[p['ubicacion']]['celdas'][p['nivel']][pos_str] = {
+                        "id_pallet": p.get('id_pallet', p.get('id')), 
+                        "proveedor": f"{p['producto'] or 'Pallet'}",
+                        "cantidad": 96, "capacidad": 96, "pct_llenado": 100
+                    }
+                    racksData[p['ubicacion']]["ocupadas"] += 1
             elif p['ubicacion'].startswith('P'):
                 piso_ocupado.append(p['ubicacion'])
         cur.close(); conn.close()
@@ -96,7 +99,7 @@ def dashboard():
         capacidad_pallet=96
     )
 
-# --- DETALLE DEL PANEL MAESTRO (SOLUCIONADO: Mapeo exacto para visualizar registrados) ---
+# --- DETALLE DEL PANEL MAESTRO (SOLUCIONADO: Compatibilidad con las variables del HTML) ---
 @app.route('/detalle_panel/<vista>', endpoint='detalle_panel')
 def detalle_panel(vista):
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -108,11 +111,12 @@ def detalle_panel(vista):
                        FROM tbl_pallets p 
                        LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
                        LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa 
-                       WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
+                       WHERE p.estado = 'Activo' ORDER BY p.id_pallet DESC""")
         raw_pallets = cur.fetchall()
         for p in raw_pallets:
-            # Forzamos la variable id_pallet para que el HTML no la encuentre vacía
+            # Aseguramos que existan todas las variables que tu HTML pudiera estar pidiendo
             p['id_pallet'] = p.get('id_pallet', p.get('id', '-'))
+            p['rack'] = p.get('ubicacion', '-') 
             pallets.append(p)
         cur.close(); conn.close()
     except Exception as e: 
@@ -120,10 +124,10 @@ def detalle_panel(vista):
         
     return render_template('detalle_panel.html', pallets=pallets, filas=pallets, columnas='pallets', titulo="Detalle de Existencias", vista=vista)
 
-# --- INGRESAR PALLET (SOLUCIONADO: Doble ruta para evitar 500 y protección de base de datos) ---
+# --- INGRESAR PALLET (SOLUCIONADO: Inserto de base de datos sin omitir Nivel/Posición) ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
-@app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST']) # El HTML usa pallet_nuevo
-def nuevo_pallet_func():
+@app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
+def pallet_nuevo():
     if 'usuario' not in session: return redirect(url_for('login'))
     provs = []; prods = []
     
@@ -138,27 +142,18 @@ def nuevo_pallet_func():
             niv = request.form.get('nivel') or None
             pos = request.form.get('posicion') or None
             
-            # Limpiamos los selectores para evitar que Postgres colapse con espacios en blanco
-            id_prov_str = request.form.get('id_proveedor')
-            id_prov = int(id_prov_str) if id_prov_str and str(id_prov_str).strip().isdigit() else None
-            
-            id_prod_str = request.form.get('id_producto')
-            id_prod = int(id_prod_str) if id_prod_str and str(id_prod_str).strip().isdigit() else None
+            id_prov = request.form.get('id_proveedor') or None
+            id_prod = request.form.get('id_producto') or None
 
-            try:
-                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
-                               VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s)""", 
-                            (qr, id_prov, id_prod, fact, ubi, niv, pos))
-            except Exception as e:
-                conn.rollback() # Si la tabla no tiene nivel/posicion, inserta modo basico
-                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion) 
-                               VALUES (%s, %s, %s, %s, 'Activo', %s)""", 
-                            (qr, id_prov, id_prod, fact, ubi))
-                
+            # Insertamos directamente todos los datos incluyendo el nivel y la posición exacta
+            cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
+                           VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s)""", 
+                        (qr, id_prov, id_prod, fact, ubi, niv, pos))
             conn.commit()
             cur.close(); conn.close()
             return redirect(url_for('dashboard'))
             
+        # Selectores para el formulario
         try:
             cur.execute("SELECT * FROM tbl_empresas")
             empresas_db = cur.fetchall()
@@ -175,7 +170,7 @@ def nuevo_pallet_func():
             
         cur.close(); conn.close()
     except Exception as e: 
-        print(f"Error evitado en nuevo_pallet: {e}")
+        print(f"Error en pallet_nuevo: {e}")
         
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
