@@ -10,7 +10,6 @@
         :root {
             --rojo-marca: #C8311F;
             --rojo-oscuro: #A4291A;
-            --terracota: #C77F3D;
             --crema: #FAF6EF;
             --carbon: #2D2925;
             --gris-borde: #E6DDCF;
@@ -103,10 +102,7 @@
             <p class="error">{{ error }}</p>
         {% endif %}
 
-        <form method="POST">
-            {% if next %}
-            <input type="hidden" name="next" value="{{ next }}">
-            {% endif %}
+        <form method="POST" action="/">
             <input type="text" name="usuario" placeholder="Usuario" required>
             <input type="password" name="clave" placeholder="Clave" required>
             <button type="submit">Ingresar</button>
