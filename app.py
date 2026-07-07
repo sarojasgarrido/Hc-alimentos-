@@ -23,10 +23,10 @@ def login():
             cur = conn.cursor(cursor_factory=RealDictCursor)
             cur.execute("SELECT * FROM tbl_usuarios WHERE usuario = %s", (usuario,))
             user = cur.fetchone()
-            cur.close(); conn.close()
+            cur.close()
+            conn.close()
             
-            # DIAGNÓSTICO: Validación temporal en texto plano para ignorar el hash
-            if user and (clave == "admin123"):
+            if user and check_password_hash(user['clave'], clave):
                 session['usuario'] = user['usuario']
                 session['nombre'] = user['nombre']
                 session['rol'] = user['rol']
@@ -62,58 +62,38 @@ def dashboard():
     }
     return render_template('dashboard.html', **context)
 
-# --- GESTIÓN DE PALLETS ---
-@app.route('/pallet_nuevo', methods=['GET', 'POST'])
-def pallet_nuevo():
+# --- RUTAS DE NAVEGACIÓN DEL MENU ---
+@app.route('/nuevo_pallet', methods=['GET', 'POST'])
+def nuevo_pallet():
     if 'usuario' not in session: return redirect(url_for('login'))
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        cur.execute("INSERT INTO tbl_pallets (id_proveedor, factura, estado) VALUES (%s, %s, 'Activo')", 
-                    (request.form.get('id_proveedor'), request.form.get('factura')))
-        conn.commit()
-    cur.execute("SELECT id_proveedor, nombre FROM tbl_proveedores")
-    provs = cur.fetchall()
-    cur.execute("SELECT id_producto, nombre FROM tbl_productos")
-    prods = cur.fetchall()
-    cur.close(); conn.close()
+    provs, prods = [], []
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            cur.execute("INSERT INTO tbl_pallets (id_proveedor, factura, estado) VALUES (%s, %s, 'Activo')", 
+                        (request.form.get('id_proveedor'), request.form.get('factura')))
+            conn.commit()
+        
+        # Bloques Try separados por si falta alguna tabla
+        try:
+            cur.execute("SELECT id_proveedor, nombre FROM tbl_proveedores")
+            provs = cur.fetchall()
+        except:
+            conn.rollback()
+            
+        try:
+            cur.execute("SELECT id_producto, nombre FROM tbl_productos")
+            prods = cur.fetchall()
+        except:
+            conn.rollback()
+            
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error en nuevo_pallet: {e}")
+        
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
-
-# --- PRODUCTOS Y USUARIOS ---
-@app.route('/productos', methods=['GET', 'POST'])
-def productos():
-    if 'usuario' not in session: return redirect(url_for('login'))
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        cur.execute("INSERT INTO tbl_productos (nombre, codigo, unidad, activo) VALUES (%s, %s, %s, True)", 
-                    (request.form.get('nombre'), request.form.get('codigo'), request.form.get('unidad')))
-        conn.commit()
-    cur.execute("SELECT * FROM tbl_productos")
-    lista = cur.fetchall()
-    cur.close(); conn.close()
-    return render_template('productos.html', productos=lista)
-
-@app.route('/usuarios', methods=['GET', 'POST'])
-def usuarios():
-    if 'usuario' not in session: return redirect(url_for('login'))
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        clave = generate_password_hash(request.form.get('clave'))
-        cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol, activo) VALUES (%s, %s, %s, 'Operador', True)", 
-                    (request.form.get('nombre'), request.form.get('usuario'), clave))
-        conn.commit()
-    cur.execute("SELECT * FROM tbl_usuarios")
-    lista = cur.fetchall()
-    cur.close(); conn.close()
-    return render_template('usuarios.html', usuarios=lista)
-
-# --- NAVEGACIÓN COMPLEMENTARIA ---
-@app.route('/detalle_panel/<vista>')
-def detalle_panel(vista): 
-    if 'usuario' not in session: return redirect(url_for('login'))
-    return render_template('detalle_panel.html', titulo=vista)
 
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
@@ -130,10 +110,55 @@ def picking():
     if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('picking.html')
 
+@app.route('/productos', methods=['GET', 'POST'])
+def productos():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    lista = []
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            cur.execute("INSERT INTO tbl_productos (nombre, codigo, unidad, activo) VALUES (%s, %s, %s, True)", 
+                        (request.form.get('nombre'), request.form.get('codigo'), request.form.get('unidad')))
+            conn.commit()
+        cur.execute("SELECT * FROM tbl_productos")
+        lista = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error en productos: {e}")
+    return render_template('productos.html', productos=lista)
+
 @app.route('/empresas')
 def empresas(): 
     if 'usuario' not in session: return redirect(url_for('login'))
     return render_template('empresas.html')
+
+@app.route('/usuarios', methods=['GET', 'POST'])
+def usuarios():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    lista = []
+    try:
+        conn = get_db()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            clave = generate_password_hash(request.form.get('clave'))
+            cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol, activo) VALUES (%s, %s, %s, 'Operador', True)", 
+                        (request.form.get('nombre'), request.form.get('usuario'), clave))
+            conn.commit()
+        cur.execute("SELECT * FROM tbl_usuarios")
+        lista = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Error en usuarios: {e}")
+    return render_template('usuarios.html', usuarios=lista)
+
+# --- RUTAS ADICIONALES (Dashboard links) ---
+@app.route('/detalle_panel/<vista>')
+def detalle_panel(vista): 
+    if 'usuario' not in session: return redirect(url_for('login'))
+    return render_template('detalle_panel.html', titulo=vista)
 
 @app.route('/pallets/detalle/<int:id_pallet>')
 def ver_pallet(id_pallet): 
