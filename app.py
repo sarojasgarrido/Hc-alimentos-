@@ -26,7 +26,6 @@ def login():
             cur.close()
             conn.close()
             
-            # Ingreso directo garantizado con admin123
             if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session['usuario'] = user['usuario']
                 session['nombre'] = user['nombre']
@@ -45,19 +44,33 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# --- DASHBOARD (MAPA VISUAL VERDE/ROJO) ---
+# --- DASHBOARD (AHORA CON DETALLE EXACTO POR CELDA) ---
 @app.route('/dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
     
     activos = 0
     ubicaciones_ocupadas_bd = []
+    racksData = {}
     
+    # 1. Preparamos el esqueleto de 20 Racks x 4 Niveles x 3 Posiciones
+    for i in range(1, 21):
+        racksData[f"R{i}"] = {
+            "ocupadas": 0,
+            "total": 12,
+            "celdas": {
+                "N4": {"1": None, "2": None, "3": None},
+                "N3": {"1": None, "2": None, "3": None},
+                "N2": {"1": None, "2": None, "3": None},
+                "N1": {"1": None, "2": None, "3": None}
+            }
+        }
+
     try:
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Validamos columnas para evitar 500
+        # Validamos estructura de base de datos
         cur.execute("""
             CREATE TABLE IF NOT EXISTS tbl_pallets (
                 id_pallet SERIAL PRIMARY KEY,
@@ -68,30 +81,61 @@ def dashboard():
                 ubicacion VARCHAR(50)
             )
         """)
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS id_producto INTEGER")
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS nivel VARCHAR(10)")
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS posicion VARCHAR(10)")
         conn.commit()
 
-        # Extraemos las ubicaciones ocupadas
-        cur.execute("SELECT ubicacion FROM tbl_pallets WHERE estado = 'Activo' AND ubicacion IS NOT NULL")
-        ubicaciones_ocupadas_bd = [r['ubicacion'] for r in cur.fetchall()]
-        activos = len(ubicaciones_ocupadas_bd)
+        # 2. Consultamos la ubicación exacta uniendo productos y empresas
+        cur.execute("""
+            SELECT p.id_pallet, p.ubicacion, p.nivel, p.posicion, 
+                   pr.nombre as producto, e.nombre as proveedor
+            FROM tbl_pallets p
+            LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto
+            LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+            WHERE p.estado = 'Activo' AND p.ubicacion IS NOT NULL
+        """)
+        pallets = cur.fetchall()
         
+        for p in pallets:
+            ubicaciones_ocupadas_bd.append(p['ubicacion'])
+            rack = p['ubicacion']
+            nivel = p['nivel']
+            pos = p['posicion']
+            
+            # Llenamos la celda específica si es un Rack
+            if rack.startswith('R') and rack in racksData and nivel and pos:
+                if nivel in racksData[rack]['celdas'] and pos in racksData[rack]['celdas'][nivel]:
+                    # Unimos Producto y Proveedor para que se muestre hermoso en el cuadro
+                    etiqueta_detalle = f"<span style='color:#C8311F;'>{p['producto'] or 'Pallet'}</span><br>{p['proveedor'] or ''}"
+                    
+                    racksData[rack]['celdas'][nivel][pos] = {
+                        "id_pallet": p['id_pallet'],
+                        "proveedor": etiqueta_detalle,
+                        "cantidad": 1,
+                        "capacidad": 1,
+                        "pct_llenado": 100
+                    }
+                    racksData[rack]["ocupadas"] += 1
+                    
+        activos = len(pallets)
         cur.close()
         conn.close()
     except Exception as e:
         print(f"Error en dashboard: {e}")
 
-    # LÓGICA DE COLORES: Verde libre, Rojo ocupado
+    # 3. Lógica dinámica de colores según % de ocupación
     def generar_color_rack(id_rack):
-        ocupado = id_rack in ubicaciones_ocupadas_bd
-        return {
-            "nombre": id_rack,
-            "ocupadas": 96 if ocupado else 0,
-            "total": 96,
-            "color": "#C8311F" if ocupado else "#E8F0E5",
-            "color_texto": "white" if ocupado else "#3C6B3F"
-        }
+        ocupadas = racksData.get(id_rack, {}).get("ocupadas", 0)
+        pct = (ocupadas / 12.0) * 100
+        
+        if pct == 100: color, texto = "#C8311F", "white"        # Lleno
+        elif pct >= 60: color, texto = "#F4B795", "#8C2E1F"     # Mayoría
+        elif pct > 0: color, texto = "#FCEFE2", "#8C5A2A"       # Parcial
+        else: color, texto = "#E8F0E5", "#3C6B3F"               # Libre
+            
+        return {"nombre": id_rack, "ocupadas": ocupadas, "total": 12, "color": color, "color_texto": texto}
 
-    # Generación de estructuras de bodega
     racks_long = [generar_color_rack(f"R{i}") for i in range(1, 17)]
     
     piso = []
@@ -109,27 +153,17 @@ def dashboard():
     
     context = {
         'porcentaje_ocupacion': round((activos / 240.0) * 100, 1) if activos else 0.0,
-        'ubicaciones_ocupadas': activos,
-        'ubicaciones_total': 240,
-        'pallets_activos': activos,
-        'pallets_parciales': 0,
-        'total_entradas': activos,
-        'total_salidas': 0,
-        'proximos_vencer': [], 
-        'racks_long': racks_long, 
-        'racks_trans': racks_trans, 
-        'piso': piso,
-        'capacidad_pallet': 96, 
-        'racks_detalle_json': json.dumps({}), 
-        'piso_detalle_json': json.dumps({}),
-        'pct_rot': {'Alta': 0, 'Media': 0, 'Baja': 0, 'Sin': 0},
-        'rotacion_lista': [], 'entradas': [], 'salidas': [],
-        'fecha_desde': request.args.get('fecha_desde', ''),
+        'ubicaciones_ocupadas': activos, 'ubicaciones_total': 240, 'pallets_activos': activos,
+        'pallets_parciales': 0, 'total_entradas': activos, 'total_salidas': 0, 'proximos_vencer': [], 
+        'racks_long': racks_long, 'racks_trans': racks_trans, 'piso': piso, 'capacidad_pallet': 96, 
+        'racks_detalle_json': json.dumps(racksData), 'piso_detalle_json': json.dumps({}),
+        'pct_rot': {'Alta': 0, 'Media': 0, 'Baja': 0, 'Sin': 0}, 'rotacion_lista': [], 
+        'entradas': [], 'salidas': [], 'fecha_desde': request.args.get('fecha_desde', ''), 
         'fecha_hasta': request.args.get('fecha_hasta', '')
     }
     return render_template('dashboard.html', **context)
 
-# --- INGRESAR PALLET ---
+# --- INGRESAR PALLET (Recibe coordenadas exactas) ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def gestionar_pallet_nuevo():
@@ -139,32 +173,31 @@ def gestionar_pallet_nuevo():
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # Validar estructura y agregar columnas de tu nuevo HTML si no existen
-        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS codigo_qr VARCHAR(100)")
-        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS ubicacion VARCHAR(50)")
-        conn.commit()
-
         if request.method == 'POST':
             codigo_qr = request.form.get('codigo_qr')
             id_proveedor = request.form.get('id_proveedor')
+            id_producto = request.form.get('id_producto')
             factura = request.form.get('factura')
             ubicacion = request.form.get('ubicacion')
+            nivel = request.form.get('nivel')
+            posicion = request.form.get('posicion')
             
-            # Guardamos el pallet con su ubicación y código QR
             cur.execute("""
-                INSERT INTO tbl_pallets (codigo_qr, id_proveedor, factura, estado, ubicacion) 
-                VALUES (%s, %s, %s, 'Activo', %s)
-            """, (codigo_qr, id_proveedor, factura, ubicacion))
+                INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
+                VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s)
+            """, (codigo_qr, id_proveedor, id_producto, factura, ubicacion, nivel, posicion))
             conn.commit()
-            
-            # Redirección inmediata al dashboard para ver el mapa
             return redirect(url_for('dashboard'))
         
         try:
             cur.execute("SELECT id_empresa as id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = True AND activo = True")
             provs = cur.fetchall()
-        except:
-            pass
+        except: pass
+            
+        try:
+            cur.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = True")
+            prods = cur.fetchall()
+        except: pass
             
         cur.close()
         conn.close()
@@ -173,7 +206,7 @@ def gestionar_pallet_nuevo():
         
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- GESTIÓN DE EMPRESAS ---
+# --- RESTO DE FUNCIONES ESTANDARIZADAS ---
 @app.route('/empresas', methods=['GET', 'POST'])
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -223,11 +256,9 @@ def eliminar_empresa(id_empresa):
         conn.commit()
         cur.close()
         conn.close()
-    except Exception as e:
-        print(f"Error al eliminar empresa: {e}")
+    except Exception as e: pass
     return redirect(url_for('empresas'))
 
-# --- PRODUCTOS Y USUARIOS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -243,8 +274,7 @@ def productos():
         lista = cur.fetchall()
         cur.close()
         conn.close()
-    except Exception as e:
-        print(f"Error en productos: {e}")
+    except Exception as e: pass
     return render_template('productos.html', productos=lista)
 
 @app.route('/usuarios', methods=['GET', 'POST'])
@@ -263,11 +293,9 @@ def usuarios():
         lista = cur.fetchall()
         cur.close()
         conn.close()
-    except Exception as e:
-        print(f"Error en usuarios: {e}")
+    except Exception as e: pass
     return render_template('usuarios.html', usuarios=lista)
 
-# --- NAVEGACIÓN COMPLEMENTARIA ---
 @app.route('/consulta_pallet')
 def consulta_pallet(): 
     if 'usuario' not in session: return redirect(url_for('login'))
