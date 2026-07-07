@@ -35,14 +35,14 @@ def login():
             error = "Error de conexión"
     return render_template('login.html', error=error)
 
-# --- DASHBOARD PRINCIPAL ---
+# --- DASHBOARD PRINCIPAL (MODIFICADO: Piso verde) ---
 @app.route('/dashboard', endpoint='dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
     
-    # Esqueleto de 20 Racks
     racksData = {f"R{i}": {"ocupadas": 0, "total": 12, "celdas": {"N4": {"1":None,"2":None,"3":None}, "N3": {"1":None,"2":None,"3":None}, "N2": {"1":None,"2":None,"3":None}, "N1": {"1":None,"2":None,"3":None}}} for i in range(1, 21)}
     pallets = []
+    piso_ocupado = []
     
     try:
         conn = get_db()
@@ -52,14 +52,15 @@ def dashboard():
                        LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' AND p.ubicacion IS NOT NULL""")
         pallets = cur.fetchall()
         for p in pallets:
-            if p['ubicacion'] in racksData and p['nivel'] in racksData[p['ubicacion']]['celdas']:
-                # Estructura JSON exacta que espera mostrarDetalle() en tu HTML
+            if p['ubicacion'].startswith('R') and p['nivel'] in racksData.get(p['ubicacion'], {}).get('celdas', {}):
                 racksData[p['ubicacion']]['celdas'][p['nivel']][p['posicion']] = {
                     "id_pallet": p['id_pallet'], 
                     "proveedor": f"{p['producto'] or 'Pallet'}",
                     "cantidad": 96, "capacidad": 96, "pct_llenado": 100
                 }
                 racksData[p['ubicacion']]["ocupadas"] += 1
+            elif p['ubicacion'].startswith('P'):
+                piso_ocupado.append(p['ubicacion'])
         cur.close(); conn.close()
     except Exception as e: print(f"Error dashboard: {e}")
 
@@ -71,40 +72,47 @@ def dashboard():
         elif pct > 0: return "#FCEFE2", "#8C5A2A"
         else: return "#E8F0E5", "#3C6B3F"
 
+    # Se agregan las zonas de piso (P1 a P12) en color Verde por defecto
+    zonas_piso = []
+    for i in range(1, 13):
+        pos_id = f"P{i}"
+        if pos_id in piso_ocupado:
+            zonas_piso.append({"posicion": str(i), "ocupada": True, "color": "#F4B795", "color_texto": "#8C2E1F"})
+        else:
+            zonas_piso.append({"posicion": str(i), "ocupada": False, "color": "#E8F0E5", "color_texto": "#3C6B3F"})
+
     activos_count = len(pallets)
     porcentaje = round((activos_count / 240.0) * 100, 1) if activos_count > 0 else 0.0
 
     return render_template('dashboard.html', 
         racks_detalle_json=json.dumps(racksData),
-        piso_detalle_json=json.dumps({}), # Previene error de Javascript en el HTML
+        piso_detalle_json=json.dumps({}),
         racks_long=[{"nombre": f"R{i}", "ocupadas": racksData[f"R{i}"]["ocupadas"], "color": generar_color_rack(f"R{i}")[0], "color_texto": generar_color_rack(f"R{i}")[1]} for i in range(1,17)],
         racks_trans=[{"nombre": f"R{i}", "ocupadas": racksData[f"R{i}"]["ocupadas"], "color": generar_color_rack(f"R{i}")[0], "color_texto": generar_color_rack(f"R{i}")[1]} for i in range(17,21)],
         pct_rot={'Alta': 0, 'Media': 0, 'Baja': 0, 'Sin': 0},
         porcentaje_ocupacion=porcentaje, ubicaciones_ocupadas=activos_count, ubicaciones_total=240,
         pallets_activos=activos_count, pallets_parciales=0, total_entradas=0, total_salidas=0,
         proximos_vencer=[], rotacion_lista=[], entradas=[], salidas=[], fecha_desde='', fecha_hasta='',
-        piso=[{"posicion": str(i), "ocupada": False} for i in range(1,13)],
+        piso=zonas_piso,
         capacidad_pallet=96
     )
 
-# --- DETALLE DEL PANEL MAESTRO ---
+# --- DETALLE DEL PANEL MAESTRO (MODIFICADO: Cruce total de columnas) ---
 @app.route('/detalle_panel/<vista>', endpoint='detalle_panel')
 def detalle_panel(vista):
     if 'usuario' not in session: return redirect(url_for('login'))
     pallets = []
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Adaptamos las variables a lo que espera detalle_panel.html (r.rack, r.proveedor, r.id_pallet)
-        cur.execute("""SELECT p.id_pallet, p.estado, p.ubicacion as rack, p.nivel, p.posicion, pr.nombre as producto, e.nombre as proveedor, p.factura as fecha_ingreso
+        cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor 
                        FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
-                       LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
+                       LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' ORDER BY p.id_pallet DESC""")
         pallets = cur.fetchall()
         cur.close(); conn.close()
     except Exception as e: print(f"Error en detalle_panel: {e}")
-    # Tu HTML usa la variable 'columnas' y 'filas', se las enviamos:
-    return render_template('detalle_panel.html', filas=pallets, columnas='pallets', titulo="Detalle de Existencias", descripcion="Listado total")
+    return render_template('detalle_panel.html', filas=pallets, columnas='pallets', titulo="Detalle de Existencias", descripcion="Listado total de pallets activos", vista=vista)
 
-# --- INGRESAR PALLET (CORREGIDO Y SIN ERRORES 500) ---
+# --- INGRESAR PALLET (MODIFICADO: Lectura segura para evitar 500) ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 def nuevo_pallet():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -118,22 +126,26 @@ def nuevo_pallet():
             conn.commit(); cur.close(); conn.close()
             return redirect(url_for('dashboard'))
             
-        # El HTML espera prov.id_proveedor. Le damos un alias a id_empresa para que haga match
-        try:
-            cur.execute("SELECT id_empresa as id_proveedor, nombre FROM tbl_empresas")
-            provs = cur.fetchall()
-        except: conn.rollback()
-        
-        try:
-            cur.execute("SELECT id_producto, nombre FROM tbl_productos")
-            prods = cur.fetchall()
-        except: conn.rollback()
-        
+        # Mapeo estructurado para asegurar que Jinja encuentre las variables
+        cur.execute("SELECT * FROM tbl_empresas")
+        empresas_db = cur.fetchall()
+        for e in empresas_db:
+            provs.append({"id_proveedor": e.get("id_empresa", e.get("id", "")), "nombre": e.get("nombre", "")})
+            
+        cur.execute("SELECT * FROM tbl_productos")
+        productos_db = cur.fetchall()
+        for p in productos_db:
+            prods.append({"id_producto": p.get("id_producto", p.get("id", "")), "nombre": p.get("nombre", "")})
+            
         cur.close(); conn.close()
-    except Exception as e: print(f"Error 500 evitado en nuevo_pallet: {e}")
+    except Exception as e: print(f"Error evitado en nuevo_pallet: {e}")
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- EMPRESAS (CORREGIDO PARA COINCIDIR CON HTML) ---
+
+# =====================================================================
+# 100% INTACTOS DESDE AQUÍ: EMPRESAS, PRODUCTOS, USUARIOS, PICKING, BUSCAR
+# =====================================================================
+
 @app.route('/empresas', endpoint='empresas', methods=['GET', 'POST'])
 def empresas():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -141,11 +153,9 @@ def empresas():
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         if request.method == 'POST':
-            # Tu form manda: nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente
             nombre = request.form.get('nombre')
             es_prov = True if request.form.get('es_proveedor') else False
             es_cli = True if request.form.get('es_cliente') else False
-            # Guardamos lo basico, si falla intentamos guardar solo nombre
             try:
                 cur.execute("INSERT INTO tbl_empresas (nombre, es_proveedor, es_cliente, activo) VALUES (%s, %s, %s, True)", (nombre, es_prov, es_cli))
             except:
@@ -154,7 +164,6 @@ def empresas():
             conn.commit()
             
         cur.execute("SELECT * FROM tbl_empresas ORDER BY 1 DESC")
-        # Aseguramos que los diccionarios tengan las llaves que pide tu HTML para que no de 500
         empresas_raw = cur.fetchall()
         for e in empresas_raw:
             lista.append({
@@ -169,17 +178,14 @@ def empresas():
     except Exception as e: print(f"Error empresas: {e}")
     return render_template('empresas.html', empresas=lista)
 
-# --- PICKING Y DESPACHO (CONECTADO A JAVASCRIPT Y API) ---
 @app.route('/picking', endpoint='picking', methods=['GET', 'POST'])
 def picking():
     if 'usuario' not in session: return redirect(url_for('login'))
     productos = []; stock_piso = []
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        # 1. Cargamos productos para el <select>
         cur.execute("SELECT id_producto, nombre FROM tbl_productos")
         productos = cur.fetchall()
-        # 2. Cargamos el stock que ya está en piso para despacharlo (Sección 2 de tu HTML)
         cur.execute("""SELECT p.id_pallet, p.ubicacion as posicion, pr.nombre as producto, 96 as cantidad, '-' as fecha_vencimiento
                        FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
                        WHERE p.estado = 'Activo' AND p.ubicacion LIKE 'P%'""")
@@ -188,7 +194,6 @@ def picking():
     except Exception as e: print(f"Error picking: {e}")
     return render_template('picking.html', productos=productos, stock_piso=stock_piso)
 
-# API Oculta que pide tu Javascript en picking.html (Línea: fetch('/picking/disponibilidad/' + idProducto))
 @app.route('/picking/disponibilidad/<int:id_producto>')
 def api_disponibilidad(id_producto):
     try:
@@ -201,13 +206,11 @@ def api_disponibilidad(id_producto):
     except: pass
     return jsonify({"disponible": False})
 
-# --- DETALLES DE PALLET Y DESPACHO DIRECTO ---
 @app.route('/pallets/detalle/<int:id_pallet>', endpoint='ver_pallet')
 def ver_pallet(id_pallet):
     if 'usuario' not in session: return redirect(url_for('login'))
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        # Tu HTML usa "rack", no "ubicacion", lo aliamos
         cur.execute("""SELECT p.*, p.ubicacion as rack, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
                        LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa 
                        WHERE p.id_pallet = %s""", (id_pallet,))
@@ -230,7 +233,6 @@ def despachar_pallet(id_pallet):
     except Exception as e: print(f"Error despachando: {e}")
     return redirect(url_for('dashboard'))
 
-# --- BUSCAR PALLETS (Funcional) ---
 @app.route('/buscar_pallets', endpoint='buscar_pallets', methods=['GET', 'POST'])
 def buscar_pallets():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -254,7 +256,6 @@ def buscar_pallets():
     except Exception as e: print(f"Error buscar_pallets: {e}")
     return render_template('buscar_pallets.html', resultados=resultados, filtros=filtros)
 
-# --- MANTENEDORES Y APOYO ---
 @app.route('/productos', endpoint='productos', methods=['GET', 'POST'])
 def productos():
     if 'usuario' not in session: return redirect(url_for('login'))
