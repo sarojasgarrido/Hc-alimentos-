@@ -78,7 +78,7 @@ def pallet_nuevo():
     cur.close(); conn.close()
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- OTRAS RUTAS ---
+# --- PRODUCTOS Y USUARIOS ---
 @app.route('/productos', methods=['GET', 'POST'])
 def productos():
     conn = get_db()
@@ -106,6 +106,7 @@ def usuarios():
     cur.close(); conn.close()
     return render_template('usuarios.html', usuarios=lista)
 
+# --- NAVEGACIÓN COMPLEMENTARIA ---
 @app.route('/detalle_panel/<vista>')
 def detalle_panel(vista): return render_template('detalle_panel.html', titulo=vista)
 @app.route('/consulta_pallet')
