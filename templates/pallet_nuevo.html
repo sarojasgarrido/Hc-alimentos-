@@ -1,77 +1,67 @@
 {% extends "base.html" %}
 {% block titulo %}Ingresar Pallet{% endblock %}
 {% block contenido %}
-<h2>Recepción e Ingreso de Pallets</h2>
+<h2>Recepción e Ingreso de Pallets (Asignación Caótica)</h2>
 
-<div class="form-box" style="max-width: 600px; margin: 0 auto;">
-    <h3 style="margin-top: 0; color: var(--rojo-marca);">Registro de Ingreso</h3>
+<div class="form-box" style="max-width: 650px;">
     <form method="POST" action="{{ url_for('pallet_nuevo') }}">
         
-        <label>Código QR del Pallet</label>
-        <input type="text" name="codigo_qr" required placeholder="Escanee la etiqueta (Ej: QR-HC-9823)">
-        
-        <label>Producto Contenido</label>
-        <select name="id_producto" required>
-            <option value="">-- Seleccione el producto --</option>
-            {% for prod in productos %}
-            <option value="{{ prod.id_producto }}">{{ prod.nombre }}</option>
-            {% endfor %}
-        </select>
-
-        <label>Empresa Proveedora</label>
+        <label>Proveedor</label>
         <select name="id_proveedor" required>
-            <option value="">-- Seleccione el proveedor --</option>
+            <option value="">Selecciona un proveedor</option>
             {% for prov in proveedores %}
             <option value="{{ prov.id_proveedor }}">{{ prov.nombre }}</option>
             {% endfor %}
         </select>
 
-        <label>Ubicación en Bodega</label>
-        <select name="ubicacion" required>
-            <option value="">-- Asigne Rack o Piso --</option>
-            <optgroup label="Racks Longitudinales">
-                {% for i in range(1, 17) %}
-                <option value="R{{ i }}">Rack R{{ i }}</option>
-                {% endfor %}
-            </optgroup>
-            <optgroup label="Racks Transversales">
-                {% for i in range(17, 21) %}
-                <option value="R{{ i }}">Rack R{{ i }}</option>
-                {% endfor %}
-            </optgroup>
-            <optgroup label="Zonas de Piso">
-                {% for i in range(1, 13) %}
-                <option value="P{{ i }}">Piso P{{ i }}</option>
-                {% endfor %}
-            </optgroup>
-        </select>
-        
-        <div style="display:flex; gap:10px; margin-top:4px;">
-            <div style="flex:1;">
-                <label>Nivel (Si es Rack)</label>
-                <select name="nivel">
-                    <option value="">-- Nivel --</option>
-                    <option value="N1">Nivel 1 (Base)</option>
-                    <option value="N2">Nivel 2</option>
-                    <option value="N3">Nivel 3</option>
-                    <option value="N4">Nivel 4 (Tope)</option>
+        <label>N de factura</label>
+        <input type="text" name="factura">
+
+        <h3 style="margin-top:20px;">Productos en este pallet</h3>
+        <div id="filas-productos" style="background:#fcfcfc; padding:15px; border:1px solid #ddd; border-radius:6px;">
+            <div class="fila-producto" style="margin-bottom:15px;">
+                <label>Producto</label>
+                <select name="id_producto[]" required>
+                    <option value="">Selecciona un producto</option>
+                    {% for prod in productos %}
+                    <option value="{{ prod.id_producto }}">{{ prod.nombre }}</option>
+                    {% endfor %}
                 </select>
-            </div>
-            <div style="flex:1;">
-                <label>Posición</label>
-                <select name="posicion">
-                    <option value="">-- Espacio --</option>
-                    <option value="1">Espacio 1 (Izq)</option>
-                    <option value="2">Espacio 2 (Centro)</option>
-                    <option value="3">Espacio 3 (Der)</option>
-                </select>
+
+                <label>Cantidad</label>
+                <input type="number" name="cantidad[]" min="1" placeholder="Ej: 96">
+
+                <label>Fecha de elaboracion</label>
+                <input type="date" name="fecha_elaboracion[]">
+
+                <label>Fecha de vencimiento</label>
+                <input type="date" name="fecha_vencimiento[]">
+
+                <button type="button" onclick="this.parentElement.remove()" style="background-color:#C8311F; color:white; padding:6px 12px; border:none; border-radius:4px; font-size:12px; cursor:pointer;">Quitar producto</button>
+                <hr style="border:none; border-top:1px dashed #ccc; margin-top:15px;">
             </div>
         </div>
+
+        <button type="button" onclick="agregarFila()" style="background-color:#8C2E1F; margin-top:10px; font-size:13px; padding:8px 12px;">+ Agregar otro producto</button>
+        <br><br>
         
-        <label>Documento / Factura (Opcional)</label>
-        <input type="text" name="factura" placeholder="Ej: Factura N° 14592">
-        
-        <button type="submit" style="width: 100%; margin-top: 20px; font-size: 15px; padding: 12px;">Registrar Pallet en Ubicación Exacta</button>
+        <button type="submit" style="width: 100%; font-size: 16px; padding: 14px;">Registrar pallet</button>
     </form>
 </div>
+
+<script>
+    function agregarFila() {
+        const contenedor = document.getElementById('filas-productos');
+        const filaOriginal = contenedor.querySelector('.fila-producto');
+        if (!filaOriginal) {
+            alert('Agregue un producto antes de clonar');
+            return;
+        }
+        const nuevaFila = filaOriginal.cloneNode(true);
+        // Limpiamos los inputs de la fila clonada
+        nuevaFila.querySelectorAll('input').forEach(input => input.value = '');
+        nuevaFila.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+        contenedor.appendChild(nuevaFila);
+    }
+</script>
 {% endblock %}
