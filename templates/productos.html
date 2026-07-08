@@ -26,32 +26,45 @@
     </div>
 
     <div style="flex: 2; min-width: 400px;">
-        <table>
-            <tr>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Unidad</th>
-                <th>Estado</th>
-            </tr>
-            {% for p in productos %}
-            <tr>
-                <td><strong>{{ p.codigo }}</strong></td>
-                <td>{{ p.nombre }}</td>
-                <td>{{ p.unidad }}</td>
-                <td>
-                    {% if p.activo %}
-                        <span class="badge badge-activo">Activo</span>
-                    {% else %}
-                        <span class="badge badge-consumido">Inactivo</span>
+        <div class="scroll-box">
+            <table>
+                <tr>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Unidad</th>
+                    <th>Estado</th>
+                    <!-- Cabecera visible solo para Admin -->
+                    {% if session.get('rol') == 'Administrador' %}
+                    <th>Acciones</th>
                     {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="4" style="text-align: center; color: #5C564E;">No hay productos registrados en la base de datos.</td>
-            </tr>
-            {% endfor %}
-        </table>
+                </tr>
+                {% for p in productos %}
+                <tr>
+                    <td><strong>{{ p.codigo }}</strong></td>
+                    <td>{{ p.nombre }}</td>
+                    <td>{{ p.unidad }}</td>
+                    <td>
+                        {% if p.activo %}
+                            <span class="badge badge-activo">Activo</span>
+                        {% else %}
+                            <span class="badge badge-consumido">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <!-- Botones visibles solo para Admin -->
+                    {% if session.get('rol') == 'Administrador' %}
+                    <td>
+                        <a href="{{ url_for('editar_producto', id_producto=p.id_producto) }}" style="color:#2c7be5; text-decoration:none; margin-right:10px; font-weight:600;">Editar</a>
+                        <a href="{{ url_for('eliminar_producto', id_producto=p.id_producto) }}" style="color:#C8311F; text-decoration:none; font-weight:600;" onclick="return confirm('¿Seguro que deseas eliminar este producto?');">Eliminar</a>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; color: #5C564E;">No hay productos registrados en la base de datos.</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}
