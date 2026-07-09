@@ -17,7 +17,6 @@ def get_db():
 # --- FUNCIÓN DE HOMOLOGACIÓN AUTOMÁTICA DE BASE DE DATOS ---
 def homologar_db(cur, conn):
     try:
-        # Asegura que las columnas vitales existan para evitar stock fantasma
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS cantidad INTEGER DEFAULT 96;")
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS cantidad_original INTEGER DEFAULT 96;")
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS fecha_elaboracion DATE;")
@@ -127,7 +126,7 @@ def dashboard():
     def generar_color_rack(id_rack):
         ocupadas = racksData.get(id_rack, {}).get("ocupadas", 0)
         pct = (ocupadas / 12.0) * 100
-        if pct >= 100: return "#C8311F", "white" # Rojo al llenarse
+        if pct >= 100: return "#C8311F", "white" 
         elif pct >= 60: return "#F4B795", "#8C2E1F"
         elif pct > 0: return "#FCEFE2", "#8C5A2A"
         else: return "#E8F0E5", "#3C6B3F"
@@ -185,7 +184,6 @@ def pallet_nuevo():
             qr_manual = request.form.get('codigo_qr', '')
             fact = request.form.get('factura', '')
             
-            # Captura de datos de forma dinámica
             id_prov_raw = request.form.get('id_proveedor')
             id_prov = int(str(id_prov_raw).strip()) if id_prov_raw and str(id_prov_raw).strip().isdigit() else None
             
@@ -217,13 +215,11 @@ def pallet_nuevo():
             
             if not ubi_caotica: ubi_caotica, niv_caotico, pos_caotica = 'P1', None, None
 
-            # Inserción con RETURNING
             cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion, cantidad, cantidad_original, fecha_elaboracion, fecha_vencimiento) 
                            VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s, %s, %s, %s, %s) RETURNING id_pallet""", 
                         (qr_manual, id_prov, id_prod, fact, ubi_caotica, niv_caotico, pos_caotica, cant, cant, fecha_elab, fecha_venc))
             new_id = cur.fetchone()['id_pallet']
             
-            # Asignar código HC
             codigo_generado = f"HC-{new_id}"
             cur.execute("UPDATE tbl_pallets SET codigo_qr = %s WHERE id_pallet = %s", (codigo_generado, new_id))
             conn.commit(); cur.close(); conn.close()
@@ -240,7 +236,7 @@ def pallet_nuevo():
     except Exception as e: print(f"Error nuevo_pallet: {e}")
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- PANTALLA DE ÉXITO (NUEVO) ---
+# --- PANTALLA DE ÉXITO ---
 @app.route('/pallet_creado/<int:id_pallet>', endpoint='pallet_creado')
 def pallet_creado(id_pallet):
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -262,7 +258,7 @@ def pallet_creado(id_pallet):
                                qr_base64=qr_base64, url_consulta=f"HC-{id_pallet}")
     except Exception: return redirect(url_for('dashboard'))
 
-# --- CONSULTA PALLET (INDEPENDIENTE Y DIRECTA) ---
+# --- CONSULTA PALLET DIRECTA ---
 @app.route('/consulta_pallet', endpoint='consulta_pallet', methods=['GET', 'POST'])
 def consulta_pallet():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -344,28 +340,100 @@ def picking():
     except Exception as e: print(f"Error picking: {e}")
     return render_template('picking.html', productos=productos, stock_piso=stock_piso)
 
-# =====================================================================
-# INTACTOS: EMPRESAS, PRODUCTOS, USUARIOS Y BUSCAR
-# =====================================================================
+@app.route('/picking/disponibilidad/<int:id_producto>')
+def api_disponibilidad(id_producto):
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SELECT id_pallet, ubicacion, COALESCE(cantidad, 96) as cantidad, COALESCE(cantidad_original, 96) as cantidad_original, fecha_vencimiento FROM tbl_pallets WHERE id_producto = %s AND estado = 'Activo'", (id_producto,))
+        pallets = cur.fetchall()
+        cur.close(); conn.close()
+        if pallets:
+            return jsonify({"disponible": True, "total_en_racks": sum(p['cantidad'] for p in pallets), "total_en_piso": 0, "total_disponible": sum(p['cantidad'] for p in pallets), "pallets": pallets})
+    except: pass
+    return jsonify({"disponible": False})
+
+# --- MANTENEDORES RECUPERADOS AL 100% ---
+@app.route('/buscar_pallets', endpoint='buscar_pallets', methods=['GET', 'POST'])
+def buscar_pallets():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    resultados = []; filtros = {}
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            busqueda = request.form.get('busqueda', '')
+            id_busqueda = busqueda.upper().replace('HC-', '').strip()
+            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
+                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+                           WHERE CAST(p.codigo_qr AS TEXT) ILIKE %s OR CAST(p.factura AS TEXT) ILIKE %s OR pr.nombre ILIKE %s 
+                           OR CAST(p.id_pallet AS TEXT) = %s ORDER BY 1 DESC""",
+                        (f'%{busqueda}%', f'%{busqueda}%', f'%{busqueda}%', id_busqueda if id_busqueda.isdigit() else '-1'))
+            filtros['busqueda'] = busqueda
+        else:
+            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
+                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+                           WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
+        resultados = cur.fetchall()
+        cur.close(); conn.close()
+    except Exception as e: print(f"Error buscar_pallets: {e}")
+    return render_template('buscar_pallets.html', resultados=resultados, filtros=filtros)
 
 @app.route('/empresas', endpoint='empresas', methods=['GET', 'POST'])
 def empresas():
-    conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        cur.execute("INSERT INTO tbl_empresas (nombre, es_proveedor, activo) VALUES (%s, True, True)", (request.form.get('nombre'),))
-        conn.commit()
-    cur.execute("SELECT * FROM tbl_empresas ORDER BY id_empresa DESC"); lista = cur.fetchall()
-    cur.close(); conn.close()
+    if 'usuario' not in session: return redirect(url_for('login'))
+    lista = []
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            nombre = request.form.get('nombre')
+            rut = request.form.get('rut')
+            telefono = request.form.get('telefono')
+            correo = request.form.get('correo')
+            direccion = request.form.get('direccion')
+            es_prov = True if request.form.get('es_proveedor') else False
+            es_cli = True if request.form.get('es_cliente') else False
+            try:
+                cur.execute("""INSERT INTO tbl_empresas (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente, activo) 
+                               VALUES (%s, %s, %s, %s, %s, %s, %s, True)""", (nombre, rut, telefono, correo, direccion, es_prov, es_cli))
+            except:
+                conn.rollback()
+                cur.execute("INSERT INTO tbl_empresas (nombre, es_proveedor, es_cliente, activo) VALUES (%s, %s, %s, True)", (nombre, es_prov, es_cli))
+            conn.commit()
+            
+        cur.execute("SELECT * FROM tbl_empresas WHERE activo = True ORDER BY 1 DESC")
+        for e in cur.fetchall():
+            lista.append({"id_empresa": e.get('id_empresa', '-'), "nombre": e.get('nombre', '-'), "rut": e.get('rut', '-'), "es_proveedor": e.get('es_proveedor', True), "es_cliente": e.get('es_cliente', False), "activo": e.get('activo', True)})
+        cur.close(); conn.close()
+    except Exception as e: print(f"Error empresas: {e}")
     return render_template('empresas.html', empresas=lista)
+
+@app.route('/eliminar_empresa/<int:id_empresa>', endpoint='eliminar_empresa')
+def eliminar_empresa(id_empresa):
+    if session.get('rol') != 'Administrador': return redirect(url_for('empresas'))
+    try:
+        conn = get_db(); cur = conn.cursor(); cur.execute("UPDATE tbl_empresas SET activo = False WHERE id_empresa = %s", (id_empresa,)); conn.commit(); cur.close(); conn.close()
+    except: pass
+    return redirect(url_for('empresas'))
+
+@app.route('/editar_empresa/<int:id_empresa>', endpoint='editar_empresa')
+def editar_empresa(id_empresa): return redirect(url_for('empresas'))
 
 @app.route('/productos', endpoint='productos', methods=['GET', 'POST'])
 def productos():
-    conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        cur.execute("INSERT INTO tbl_productos (nombre, activo) VALUES (%s, True)", (request.form.get('nombre'),))
-        conn.commit()
-    cur.execute("SELECT * FROM tbl_productos ORDER BY id_producto DESC"); lista = cur.fetchall()
-    cur.close(); conn.close()
+    if 'usuario' not in session: return redirect(url_for('login'))
+    lista = []
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            nombre = request.form.get('nombre')
+            unidad = request.form.get('unidad', 'Unidades')
+            try: cur.execute("INSERT INTO tbl_productos (nombre, unidad, activo) VALUES (%s, %s, True)", (nombre, unidad))
+            except:
+                conn.rollback(); cur.execute("INSERT INTO tbl_productos (nombre, activo) VALUES (%s, True)", (nombre,))
+            conn.commit()
+        cur.execute("SELECT * FROM tbl_productos WHERE activo = True ORDER BY 1 DESC")
+        lista = cur.fetchall()
+        cur.close(); conn.close()
+    except: pass
     return render_template('productos.html', productos=lista)
 
 @app.route('/eliminar_producto/<int:id_producto>', endpoint='eliminar_producto')
@@ -376,15 +444,25 @@ def eliminar_producto(id_producto):
     except: pass
     return redirect(url_for('productos'))
 
+@app.route('/editar_producto/<int:id_producto>', endpoint='editar_producto')
+def editar_producto(id_producto): return redirect(url_for('productos'))
+
 @app.route('/usuarios', endpoint='usuarios', methods=['GET', 'POST'])
 def usuarios():
-    conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    if request.method == 'POST':
-        clave_hash = generate_password_hash(request.form.get('clave'))
-        cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave) VALUES (%s, %s, %s)", (request.form.get('nombre'), request.form.get('usuario'), clave_hash))
-        conn.commit()
-    cur.execute("SELECT * FROM tbl_usuarios"); lista = cur.fetchall()
-    cur.close(); conn.close()
+    if 'usuario' not in session: return redirect(url_for('login'))
+    lista = []
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            nombre = request.form.get('nombre'); user = request.form.get('usuario'); rol = request.form.get('rol', 'Operador'); clave_hash = generate_password_hash(request.form.get('clave'))
+            try: cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave, rol) VALUES (%s, %s, %s, %s)", (nombre, user, clave_hash, rol))
+            except:
+                conn.rollback(); cur.execute("INSERT INTO tbl_usuarios (nombre, usuario, clave) VALUES (%s, %s, %s)", (nombre, user, clave_hash))
+            conn.commit()
+        cur.execute("SELECT * FROM tbl_usuarios")
+        lista = cur.fetchall()
+        cur.close(); conn.close()
+    except: pass
     return render_template('usuarios.html', usuarios=lista)
 
 @app.route('/eliminar_usuario/<int:id_usuario>', endpoint='eliminar_usuario')
@@ -395,15 +473,22 @@ def eliminar_usuario(id_usuario):
     except: pass
     return redirect(url_for('usuarios'))
 
-@app.route('/buscar_pallets', endpoint='buscar_pallets')
-def buscar_pallets(): return render_template('buscar_pallets.html')
+@app.route('/editar_usuario/<int:id_usuario>', endpoint='editar_usuario')
+def editar_usuario(id_usuario): return redirect(url_for('usuarios'))
 
 @app.route('/pallets/detalle/<int:id_pallet>', endpoint='ver_pallet')
 def ver_pallet(id_pallet):
-    conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-    cur.execute("SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.id_pallet = %s", (id_pallet,))
-    pallet = cur.fetchone(); cur.close(); conn.close()
-    return render_template('pallet_detalle.html', pallet=pallet or {}, items=[pallet] if pallet else [])
+    if 'usuario' not in session: return redirect(url_for('login'))
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("""SELECT p.*, p.ubicacion as rack, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
+                       LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa 
+                       WHERE p.id_pallet = %s""", (id_pallet,))
+        pallet = cur.fetchone()
+        cur.close(); conn.close()
+        items = [{"producto": pallet.get('producto'), "cantidad": pallet.get('cantidad', 96)}] if pallet and pallet.get('producto') else []
+        return render_template('pallet_detalle.html', pallet=pallet or {}, items=items)
+    except: return redirect(url_for('dashboard'))
 
 @app.route('/pallets/descargar_qr/<int:id_pallet>', endpoint='descargar_qr')
 def descargar_qr(id_pallet):
@@ -419,8 +504,10 @@ def descargar_qr(id_pallet):
 
 @app.route('/pallets/historial/<int:id_pallet>', endpoint='historial_pallet')
 def historial_pallet(id_pallet): return redirect(url_for('ver_pallet', id_pallet=id_pallet))
+
 @app.route('/pallets/editar/<int:id_pallet>', endpoint='editar_pallet')
 def editar_pallet(id_pallet): return redirect(url_for('ver_pallet', id_pallet=id_pallet))
+
 @app.route('/logout', endpoint='logout')
 def logout(): session.clear(); return redirect(url_for('login'))
 
