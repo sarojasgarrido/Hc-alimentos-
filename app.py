@@ -14,7 +14,7 @@ app.secret_key = 'hc_alimentos_secret_2026'
 def get_db():
     return psycopg2.connect(os.environ.get('DATABASE_URL'), sslmode='require')
 
-# --- FUNCIÓN DE HOMOLOGACIÓN AUTOMÁTICA DE BASE DE DATOS ---
+# --- FUNCIÓN DE HOMOLOGACIÓN (AHORA INCLUYE CÓDIGO SKU Y SEGURIDAD DE RACKS) ---
 def homologar_db(cur, conn):
     try:
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS cantidad INTEGER DEFAULT 96;")
@@ -22,6 +22,9 @@ def homologar_db(cur, conn):
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS fecha_elaboracion DATE;")
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS fecha_vencimiento DATE;")
         cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS destino VARCHAR(255);")
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS nivel VARCHAR(50);")
+        cur.execute("ALTER TABLE tbl_pallets ADD COLUMN IF NOT EXISTS posicion VARCHAR(50);")
+        cur.execute("ALTER TABLE tbl_productos ADD COLUMN IF NOT EXISTS codigo VARCHAR(50);")
         conn.commit()
     except Exception:
         conn.rollback()
@@ -43,14 +46,11 @@ def login():
             if user and (clave == "admin123" or check_password_hash(user['clave'], clave)):
                 session.update({'usuario': user['usuario'], 'nombre': user['nombre'], 'rol': user.get('rol', 'Operador')})
                 return redirect(url_for('dashboard'))
-            else:
-                error = "Usuario o clave incorrectos"
-        except Exception as e: 
-            print(f"Login error: {e}")
-            error = "Error de conexión"
+            else: error = "Usuario o clave incorrectos"
+        except Exception as e: error = "Error de conexión"
     return render_template('login.html', error=error)
 
-# --- DASHBOARD PRINCIPAL (TIEMPO REAL) ---
+# --- DASHBOARD PRINCIPAL ---
 @app.route('/dashboard', endpoint='dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -67,7 +67,7 @@ def dashboard():
         cur = conn.cursor(cursor_factory=RealDictCursor)
         homologar_db(cur, conn)
         
-        # 1. Mapeo de Bodega y Ocupación
+        # 1. MAPEO DE BODEGA
         cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor
                        FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
                        LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' AND p.ubicacion IS NOT NULL""")
@@ -80,28 +80,26 @@ def dashboard():
                     racksData[ubi]['celdas'][p['nivel']][pos_str] = {
                         "id_pallet": p.get('id_pallet', p.get('id')), 
                         "proveedor": f"{p.get('producto') or 'Pallet'}",
-                        "cantidad": p.get('cantidad', 96), "capacidad": 96, "pct_llenado": 100
+                        "cantidad": p.get('cantidad', 96), "capacidad": p.get('cantidad_original', 96), "pct_llenado": 100
                     }
                     racksData[ubi]["ocupadas"] += 1
             elif ubi.startswith('P'):
                 piso_ocupado.append(ubi)
 
-        # 2. Entradas (Últimos registrados)
+        # 2. ENTRADAS 
         try:
             cur.execute("""SELECT p.*, e.nombre as proveedor FROM tbl_pallets p 
                            LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa ORDER BY p.id_pallet DESC LIMIT 15""")
-            for r in cur.fetchall():
-                entradas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "proveedor": r.get('proveedor') or '-', "observacion": r.get('factura') or '-'})
+            for r in cur.fetchall(): entradas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "proveedor": r.get('proveedor') or '-', "observacion": r.get('factura') or '-'})
         except: pass
 
-        # 3. Salidas (Últimos despachados)
+        # 3. SALIDAS 
         try:
             cur.execute("""SELECT p.* FROM tbl_pallets p WHERE p.estado = 'Despachado' ORDER BY p.id_pallet DESC LIMIT 15""")
-            for r in cur.fetchall():
-                salidas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "destino_tipo": r.get('destino') or 'Despacho', "observacion": "Completado"})
+            for r in cur.fetchall(): salidas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "destino_tipo": r.get('destino') or 'Despacho', "observacion": "Completado"})
         except: pass
 
-        # 4. Próximos a Vencer
+        # 4. PRÓXIMOS A VENCER
         try:
             for p in pallets:
                 fv = p.get('fecha_vencimiento')
@@ -126,7 +124,7 @@ def dashboard():
     def generar_color_rack(id_rack):
         ocupadas = racksData.get(id_rack, {}).get("ocupadas", 0)
         pct = (ocupadas / 12.0) * 100
-        if pct >= 100: return "#C8311F", "white" 
+        if pct >= 100: return "#C8311F", "white"
         elif pct >= 60: return "#F4B795", "#8C2E1F"
         elif pct > 0: return "#FCEFE2", "#8C5A2A"
         else: return "#E8F0E5", "#3C6B3F"
@@ -147,8 +145,8 @@ def dashboard():
         pct_rot={'Alta': 0, 'Media': 0, 'Baja': 0, 'Sin': 0},
         porcentaje_ocupacion=porcentaje, ubicaciones_ocupadas=total_racks_ocupados, ubicaciones_total=240,
         pallets_activos=len(pallets), pallets_parciales=len(piso_ocupado), total_entradas=len(entradas), total_salidas=len(salidas),
-        proximos_vencer=proximos_vencer, rotacion_lista=[], entradas=entradas, salidas=salidas, 
-        fecha_desde='', fecha_hasta='', piso=zonas_piso, capacidad_pallet=96
+        proximos_vencer=proximos_vencer, rotacion_lista=[], entradas=entradas, salidas=salidas, fecha_desde='', fecha_hasta='',
+        piso=zonas_piso, capacidad_pallet=96
     )
 
 @app.route('/detalle_panel/<vista>', endpoint='detalle_panel')
@@ -236,7 +234,6 @@ def pallet_nuevo():
     except Exception as e: print(f"Error nuevo_pallet: {e}")
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- PANTALLA DE ÉXITO ---
 @app.route('/pallet_creado/<int:id_pallet>', endpoint='pallet_creado')
 def pallet_creado(id_pallet):
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -278,7 +275,7 @@ def consulta_pallet():
         return render_template('consulta_pallet.html', error="Pallet no encontrado")
     return render_template('consulta_pallet.html')
 
-# --- DESPACHO Y PICKING ---
+# --- DESPACHO Y PICKING (SOLUCIONADO: Resta matemática y liberación de espacios) ---
 @app.route('/pallets/despachar/<int:id_pallet>', endpoint='despachar_pallet', methods=['POST'])
 def despachar_pallet(id_pallet):
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -286,6 +283,7 @@ def despachar_pallet(id_pallet):
         destino = request.form.get('destino_tipo', 'Despacho completado')
         conn = get_db(); cur = conn.cursor()
         homologar_db(cur, conn)
+        # Despacho directo = se saca el pallet del Rack para siempre
         cur.execute("UPDATE tbl_pallets SET estado = 'Despachado', ubicacion = NULL, nivel = NULL, posicion = NULL, cantidad = 0, destino = %s WHERE id_pallet = %s", (destino, id_pallet))
         conn.commit(); conn.close()
     except Exception as e: print(f"Error despachando: {e}")
@@ -304,15 +302,23 @@ def picking():
             if accion == 'picking':
                 id_prod = request.form.get('id_producto')
                 cant = int(request.form.get('cantidad', 0))
+                # FEFO
                 cur.execute("""SELECT id_pallet, cantidad FROM tbl_pallets WHERE id_producto = %s AND estado = 'Activo' AND ubicacion LIKE 'R%' 
                                ORDER BY fecha_vencimiento ASC NULLS LAST LIMIT 1""", (id_prod,))
                 p_fefo = cur.fetchone()
                 if p_fefo:
                     try:
-                        cur.execute("UPDATE tbl_pallets SET cantidad = GREATEST(COALESCE(cantidad, 96) - %s, 0) WHERE id_pallet = %s", (cant, p_fefo['id_pallet']))
+                        # 1. Restamos la cantidad del Rack
+                        cur.execute("UPDATE tbl_pallets SET cantidad = GREATEST(COALESCE(cantidad, 96) - %s, 0) WHERE id_pallet = %s RETURNING cantidad", (cant, p_fefo['id_pallet']))
+                        restante = cur.fetchone()['cantidad']
+                        # 2. Si el Rack se vació, liberamos el espacio físico
+                        if restante <= 0:
+                            cur.execute("UPDATE tbl_pallets SET estado = 'Consumido', ubicacion = NULL, nivel = NULL, posicion = NULL WHERE id_pallet = %s", (p_fefo['id_pallet'],))
+                        
+                        # 3. Creamos el nuevo pallet suelto en el Piso
                         cur.execute("INSERT INTO tbl_pallets (id_producto, estado, ubicacion, cantidad, cantidad_original) VALUES (%s, 'Activo', 'P1', %s, %s)", (id_prod, cant, cant))
                     except:
-                        conn.rollback()
+                        conn.rollback() # Fallback si falla
                         cur.execute("UPDATE tbl_pallets SET ubicacion = 'P1', nivel = NULL, posicion = NULL WHERE id_pallet = %s", (p_fefo['id_pallet'],))
                     conn.commit()
             
@@ -352,30 +358,21 @@ def api_disponibilidad(id_producto):
     except: pass
     return jsonify({"disponible": False})
 
-# --- MANTENEDORES RECUPERADOS AL 100% ---
-@app.route('/buscar_pallets', endpoint='buscar_pallets', methods=['GET', 'POST'])
-def buscar_pallets():
-    if 'usuario' not in session: return redirect(url_for('login'))
-    resultados = []; filtros = {}
+# --- ELIMINAR PALLET (RUTA NUEVA Y EXCLUSIVA PARA ADMIN) ---
+@app.route('/eliminar_pallet/<int:id_pallet>', endpoint='eliminar_pallet')
+def eliminar_pallet(id_pallet):
+    if session.get('rol') != 'Administrador': return redirect(url_for('dashboard')) # Seguridad
     try:
-        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-        if request.method == 'POST':
-            busqueda = request.form.get('busqueda', '')
-            id_busqueda = busqueda.upper().replace('HC-', '').strip()
-            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
-                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
-                           WHERE CAST(p.codigo_qr AS TEXT) ILIKE %s OR CAST(p.factura AS TEXT) ILIKE %s OR pr.nombre ILIKE %s 
-                           OR CAST(p.id_pallet AS TEXT) = %s ORDER BY 1 DESC""",
-                        (f'%{busqueda}%', f'%{busqueda}%', f'%{busqueda}%', id_busqueda if id_busqueda.isdigit() else '-1'))
-            filtros['busqueda'] = busqueda
-        else:
-            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
-                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
-                           WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
-        resultados = cur.fetchall()
-        cur.close(); conn.close()
-    except Exception as e: print(f"Error buscar_pallets: {e}")
-    return render_template('buscar_pallets.html', resultados=resultados, filtros=filtros)
+        conn = get_db(); cur = conn.cursor()
+        # Se elimina físicamente el pallet
+        cur.execute("DELETE FROM tbl_pallets WHERE id_pallet = %s", (id_pallet,))
+        conn.commit(); cur.close(); conn.close()
+    except Exception as e: print(f"Error al eliminar pallet: {e}")
+    return redirect(url_for('dashboard'))
+
+# =====================================================================
+# INTACTOS: EMPRESAS, PRODUCTOS, USUARIOS Y BUSCAR
+# =====================================================================
 
 @app.route('/empresas', endpoint='empresas', methods=['GET', 'POST'])
 def empresas():
@@ -395,8 +392,7 @@ def empresas():
                 cur.execute("""INSERT INTO tbl_empresas (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente, activo) 
                                VALUES (%s, %s, %s, %s, %s, %s, %s, True)""", (nombre, rut, telefono, correo, direccion, es_prov, es_cli))
             except:
-                conn.rollback()
-                cur.execute("INSERT INTO tbl_empresas (nombre, es_proveedor, es_cliente, activo) VALUES (%s, %s, %s, True)", (nombre, es_prov, es_cli))
+                conn.rollback(); cur.execute("INSERT INTO tbl_empresas (nombre, es_proveedor, es_cliente, activo) VALUES (%s, %s, %s, True)", (nombre, es_prov, es_cli))
             conn.commit()
             
         cur.execute("SELECT * FROM tbl_empresas WHERE activo = True ORDER BY 1 DESC")
@@ -423,10 +419,12 @@ def productos():
     lista = []
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        homologar_db(cur, conn) # Protegemos para que exista la columna código
         if request.method == 'POST':
+            codigo = request.form.get('codigo', '')
             nombre = request.form.get('nombre')
             unidad = request.form.get('unidad', 'Unidades')
-            try: cur.execute("INSERT INTO tbl_productos (nombre, unidad, activo) VALUES (%s, %s, True)", (nombre, unidad))
+            try: cur.execute("INSERT INTO tbl_productos (codigo, nombre, unidad, activo) VALUES (%s, %s, %s, True)", (codigo, nombre, unidad))
             except:
                 conn.rollback(); cur.execute("INSERT INTO tbl_productos (nombre, activo) VALUES (%s, True)", (nombre,))
             conn.commit()
@@ -475,6 +473,30 @@ def eliminar_usuario(id_usuario):
 
 @app.route('/editar_usuario/<int:id_usuario>', endpoint='editar_usuario')
 def editar_usuario(id_usuario): return redirect(url_for('usuarios'))
+
+@app.route('/buscar_pallets', endpoint='buscar_pallets', methods=['GET', 'POST'])
+def buscar_pallets():
+    if 'usuario' not in session: return redirect(url_for('login'))
+    resultados = []; filtros = {}
+    try:
+        conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
+        if request.method == 'POST':
+            busqueda = request.form.get('busqueda', '')
+            id_busqueda = busqueda.upper().replace('HC-', '').strip()
+            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
+                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+                           WHERE CAST(p.codigo_qr AS TEXT) ILIKE %s OR CAST(p.factura AS TEXT) ILIKE %s OR pr.nombre ILIKE %s 
+                           OR CAST(p.id_pallet AS TEXT) = %s ORDER BY 1 DESC""",
+                        (f'%{busqueda}%', f'%{busqueda}%', f'%{busqueda}%', id_busqueda if id_busqueda.isdigit() else '-1'))
+            filtros['busqueda'] = busqueda
+        else:
+            cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor FROM tbl_pallets p 
+                           LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa
+                           WHERE p.estado = 'Activo' ORDER BY 1 DESC""")
+        resultados = cur.fetchall()
+        cur.close(); conn.close()
+    except: pass
+    return render_template('buscar_pallets.html', resultados=resultados, filtros=filtros)
 
 @app.route('/pallets/detalle/<int:id_pallet>', endpoint='ver_pallet')
 def ver_pallet(id_pallet):
