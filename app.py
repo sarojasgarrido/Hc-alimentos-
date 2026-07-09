@@ -35,7 +35,7 @@ def login():
         except Exception as e: error = "Error de conexión"
     return render_template('login.html', error=error)
 
-# --- DASHBOARD PRINCIPAL (100% TIEMPO REAL Y BLINDADO) ---
+# --- DASHBOARD PRINCIPAL (100% TIEMPO REAL) ---
 @app.route('/dashboard', endpoint='dashboard')
 def dashboard():
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -51,7 +51,7 @@ def dashboard():
         conn = get_db()
         cur = conn.cursor(cursor_factory=RealDictCursor)
         
-        # 1. MAPEO DE BODEGA Y ACTIVOS (Consulta segura con p.*)
+        # 1. MAPEO DE BODEGA Y ACTIVOS
         cur.execute("""SELECT p.*, pr.nombre as producto, e.nombre as proveedor
                        FROM tbl_pallets p LEFT JOIN tbl_productos pr ON p.id_producto = pr.id_producto 
                        LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa WHERE p.estado = 'Activo' AND p.ubicacion IS NOT NULL""")
@@ -70,22 +70,22 @@ def dashboard():
             elif ubi.startswith('P'):
                 piso_ocupado.append(ubi)
 
-        # 2. ENTRADAS (Últimos 15 pallets registrados)
+        # 2. ENTRADAS (Últimos registrados)
         try:
             cur.execute("""SELECT p.*, e.nombre as proveedor FROM tbl_pallets p 
                            LEFT JOIN tbl_empresas e ON p.id_proveedor = e.id_empresa ORDER BY p.id_pallet DESC LIMIT 15""")
             raw_ent = cur.fetchall()
             for r in raw_ent:
                 entradas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "proveedor": r.get('proveedor') or '-', "observacion": r.get('factura') or '-'})
-        except Exception as e: print(f"Error Entradas: {e}")
+        except Exception: pass
 
-        # 3. SALIDAS (Últimos 15 pallets despachados)
+        # 3. SALIDAS (Últimos despachados)
         try:
             cur.execute("""SELECT p.* FROM tbl_pallets p WHERE p.estado = 'Despachado' ORDER BY p.id_pallet DESC LIMIT 15""")
             raw_sal = cur.fetchall()
             for r in raw_sal:
                 salidas.append({"fecha": "Reciente", "id_pallet": r['id_pallet'], "destino_tipo": "Despacho", "observacion": "Completado"})
-        except Exception as e: print(f"Error Salidas: {e}")
+        except Exception: pass
 
         # 4. PRÓXIMOS A VENCER
         try:
@@ -104,7 +104,7 @@ def dashboard():
                             proximos_vencer.append(p)
                     except: pass
             proximos_vencer = sorted(proximos_vencer, key=lambda x: x['dias_para_vencer'])[:10]
-        except Exception as e: print(f"Error Vencimientos: {e}")
+        except Exception: pass
 
         cur.close(); conn.close()
     except Exception as e: print(f"Error dashboard principal: {e}")
@@ -112,7 +112,7 @@ def dashboard():
     def generar_color_rack(id_rack):
         ocupadas = racksData.get(id_rack, {}).get("ocupadas", 0)
         pct = (ocupadas / 12.0) * 100
-        if pct == 100: return "#C8311F", "white" # ROJO SI ESTÁ LLENO
+        if pct == 100: return "#C8311F", "white" # Rojo al estar lleno
         elif pct >= 60: return "#F4B795", "#8C2E1F"
         elif pct > 0: return "#FCEFE2", "#8C5A2A"
         else: return "#E8F0E5", "#3C6B3F"
@@ -155,7 +155,7 @@ def detalle_panel(vista):
     except Exception as e: print(f"Error en detalle_panel: {e}")
     return render_template('detalle_panel.html', pallets=pallets, filas=pallets, columnas='pallets', titulo="Detalle de Existencias", vista=vista)
 
-# --- INGRESAR PALLET (ALGORITMO CAÓTICO Y REDIRECCIÓN A ÉXITO) ---
+# --- INGRESAR PALLET (ALGORITMO CAÓTICO 100% CONECTADO Y PANTALLA DE ÉXITO) ---
 @app.route('/nuevo_pallet', endpoint='nuevo_pallet', methods=['GET', 'POST'])
 @app.route('/pallet_nuevo', endpoint='pallet_nuevo', methods=['GET', 'POST'])
 def pallet_nuevo():
@@ -165,19 +165,17 @@ def pallet_nuevo():
     try:
         conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
         if request.method == 'POST':
-            id_prov = request.form.get('id_proveedor')
+            # Capturamos la data exactamente como la envía tu archivo HTML actual
+            qr_manual = request.form.get('codigo_qr', '')
+            id_prov_str = request.form.get('id_proveedor')
+            id_prov = int(id_prov_str) if id_prov_str and id_prov_str.isdigit() else None
+            
+            id_prod_str = request.form.get('id_producto')
+            id_prod = int(id_prod_str) if id_prod_str and id_prod_str.isdigit() else None
+            
             fact = request.form.get('factura', '')
-            ids_productos = request.form.getlist('id_producto[]')
-            cantidades = request.form.getlist('cantidad[]')
-            fechas_elab = request.form.getlist('fecha_elaboracion[]')
-            fechas_venc = request.form.getlist('fecha_vencimiento[]')
 
-            id_prod = ids_productos[0] if ids_productos else None
-            cantidad_cajas = cantidades[0] if cantidades else 96
-            fecha_elab = fechas_elab[0] if fechas_elab and fechas_elab[0] else None
-            fecha_venc = fechas_venc[0] if fechas_venc and fechas_venc[0] else None
-
-            # ALGORITMO CAÓTICO
+            # ALGORITMO CAÓTICO: Búsqueda del primer hueco libre en la matriz de la bodega
             cur.execute("SELECT ubicacion, nivel, posicion FROM tbl_pallets WHERE estado = 'Activo' AND ubicacion LIKE 'R%'")
             ocupados = set((r.get('ubicacion'), r.get('nivel'), str(r.get('posicion'))) for r in cur.fetchall())
             
@@ -193,24 +191,25 @@ def pallet_nuevo():
             
             if not ubi_caotica: ubi_caotica, niv_caotico, pos_caotica = 'P1', None, None
 
-            # INSERCIÓN CON RETORNO DE ID
+            # Inserción blindada con retorno de ID para certificar el ingreso
             try:
-                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion, cantidad, cantidad_original, fecha_elaboracion, fecha_vencimiento) 
-                               VALUES ('QR-AUTO', %s, %s, %s, 'Activo', %s, %s, %s, %s, %s, %s, %s) RETURNING id_pallet""", 
-                            (id_prov, id_prod, fact, ubi_caotica, niv_caotico, pos_caotica, cantidad_cajas, cantidad_cajas, fecha_elab, fecha_venc))
+                cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion, cantidad, cantidad_original) 
+                               VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s, 96, 96) RETURNING id_pallet""", 
+                            (qr_manual, id_prov, id_prod, fact, ubi_caotica, niv_caotico, pos_caotica))
                 new_id = cur.fetchone()['id_pallet']
             except:
                 conn.rollback()
                 cur.execute("""INSERT INTO tbl_pallets (codigo_qr, id_proveedor, id_producto, factura, estado, ubicacion, nivel, posicion) 
-                               VALUES ('QR-AUTO', %s, %s, %s, 'Activo', %s, %s, %s) RETURNING id_pallet""", 
-                            (id_prov, id_prod, fact, ubi_caotica, niv_caotico, pos_caotica))
+                               VALUES (%s, %s, %s, %s, 'Activo', %s, %s, %s) RETURNING id_pallet""", 
+                            (qr_manual, id_prov, id_prod, fact, ubi_caotica, niv_caotico, pos_caotica))
                 new_id = cur.fetchone()['id_pallet']
             
-            # Asignamos el HC-ID visual
-            cur.execute("UPDATE tbl_pallets SET codigo_qr = %s WHERE id_pallet = %s", (f"HC-{new_id}", new_id))
+            # Asignamos el código HC definitivo y certificamos
+            codigo_generado = f"HC-{new_id}"
+            cur.execute("UPDATE tbl_pallets SET codigo_qr = %s WHERE id_pallet = %s", (codigo_generado, new_id))
             conn.commit(); cur.close(); conn.close()
             
-            # Llevamos al usuario a la pantalla de éxito
+            # Redirección a la pantalla de éxito
             return redirect(url_for('pallet_creado', id_pallet=new_id))
             
         try:
@@ -223,7 +222,7 @@ def pallet_nuevo():
     except Exception as e: print(f"Error en pallet_nuevo: {e}")
     return render_template('pallet_nuevo.html', proveedores=provs, productos=prods)
 
-# --- PANTALLA DE ÉXITO (MUESTRA LA UBICACIÓN CAÓTICA Y EL QR HC) ---
+# --- PANTALLA DE ÉXITO CERTIFICADO (MUESTRA CÓDIGO Y UBICACIÓN CAÓTICA) ---
 @app.route('/pallet_creado/<int:id_pallet>', endpoint='pallet_creado')
 def pallet_creado(id_pallet):
     if 'usuario' not in session: return redirect(url_for('login'))
@@ -245,23 +244,22 @@ def pallet_creado(id_pallet):
                                posicion=pallet.get('posicion','-'), codigo_qr=f"HC-{id_pallet}", 
                                qr_base64=qr_base64, url_consulta=f"HC-{id_pallet}")
     except Exception as e:
-        print(f"Error pallet_creado: {e}")
-        return redirect(url_for('dashboard'))
+        print(f"Error pallet_creado: {e}"); return redirect(url_for('dashboard'))
 
-# --- CONSULTAR PALLET (RUTA TOTALMENTE INDEPENDIENTE) ---
+# --- CONSULTAR PALLET (RUTA INDEPENDIENTE Y DIRECTA) ---
 @app.route('/consulta_pallet', endpoint='consulta_pallet', methods=['GET', 'POST'])
 def consulta_pallet():
     if 'usuario' not in session: return redirect(url_for('login'))
     if request.method == 'POST':
         codigo = request.form.get('codigo_qr', '').strip().upper()
-        # Si el usuario digita "HC-15" o "15"
+        # Escanea si el usuario colocó HC-15 o solo 15
         id_busqueda = codigo.replace('HC-', '')
         if id_busqueda.isdigit():
             return redirect(url_for('ver_pallet', id_pallet=int(id_busqueda)))
         
         try:
             conn = get_db(); cur = conn.cursor(cursor_factory=RealDictCursor)
-            cur.execute("SELECT id_pallet FROM tbl_pallets WHERE codigo_qr ILIKE %s LIMIT 1", (codigo,))
+            cur.execute("SELECT id_pallet FROM tbl_pallets WHERE codigo_qr ILIKE %s LIMIT 1", (f"%{codigo}%",))
             res = cur.fetchone()
             cur.close(); conn.close()
             if res: return redirect(url_for('ver_pallet', id_pallet=res['id_pallet']))
