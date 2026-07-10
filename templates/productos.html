@@ -14,12 +14,7 @@
             <input type="text" name="nombre" required placeholder="Ej: Harina 25kg">
             
             <label>Unidad de Medida</label>
-            <select name="unidad" required>
-                <option value="Cajas">Cajas</option>
-                <option value="Sacos">Sacos</option>
-                <option value="Unidades">Unidades</option>
-                <option value="Kg">Kilogramos</option>
-            </select>
+            <input type="text" name="unidad" required placeholder="Ej: Kilos, Cajas, Litros, Sacos">
             
             <button type="submit" style="width: 100%; margin-top: 15px;">Guardar Producto</button>
         </form>
@@ -33,7 +28,6 @@
                     <th>Nombre</th>
                     <th>Unidad</th>
                     <th>Estado</th>
-                    <!-- Cabecera visible solo para Admin -->
                     {% if session.get('rol') == 'Administrador' %}
                     <th>Acciones</th>
                     {% endif %}
@@ -50,7 +44,6 @@
                             <span class="badge badge-consumido">Inactivo</span>
                         {% endif %}
                     </td>
-                    <!-- Botones visibles solo para Admin -->
                     {% if session.get('rol') == 'Administrador' %}
                     <td>
                         <a href="{{ url_for('editar_producto', id_producto=p.id_producto) }}" style="color:#2c7be5; text-decoration:none; margin-right:10px; font-weight:600;">Editar</a>
