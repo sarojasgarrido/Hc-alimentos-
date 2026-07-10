@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 from db import get_connection
 import os
 import io
@@ -48,27 +48,6 @@ def admin_requerido(funcion):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    # --- INICIO MEJORA: AUTO-CREAR ADMIN MAESTRO SI LA TABLA ESTÁ VACÍA ---
-    try:
-        conn_verif = get_connection()
-        cursor_verif = conn_verif.cursor()
-        cursor_verif.execute("SELECT COUNT(*) FROM tbl_usuarios")
-        if cursor_verif.fetchone()[0] == 0:
-            clave_maestra_hash = generate_password_hash("admin123")
-            cursor_verif.execute(
-                """
-                INSERT INTO tbl_usuarios (nombre, usuario, clave, rol, activo) 
-                VALUES (%s, %s, %s, %s, TRUE)
-                """,
-                ("Administrador Maestro", "admin", clave_maestra_hash, "Administrador")
-            )
-            conn_verif.commit()
-            print("Usuario 'admin' creado automáticamente con éxito.")
-        conn_verif.close()
-    except Exception as e:
-        print(f"Nota: No se pudo verificar el usuario maestro: {e}")
-    # --- FIN MEJORA ---
-
     siguiente = request.args.get("next") or request.form.get("next")
 
     if request.method == "POST":
@@ -726,7 +705,7 @@ def nuevo_pallet():
             )
 
         cursor.execute(
-            "INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion, vigente) VALUES (%s, %s, 1)",
+            "INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion, vigente) VALUES (?, %s, 1)",
             (id_pallet, id_ubicacion)
         )
 
@@ -738,7 +717,7 @@ def nuevo_pallet():
         cursor.execute(
             """
             INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (%s, 'Ingreso', %s)
+            VALUES (?, 'Ingreso', %s)
             """,
             (id_pallet, f"Asignado a {rack}-{nivel}-{posicion}")
         )
@@ -1120,7 +1099,7 @@ def picking():
                     """
                     INSERT INTO tbl_movimientos
                         (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (%s, 'Picking', %s, 'Piso')
+                    VALUES (?, 'Picking', %s, 'Piso')
                     """,
                     (c.id_pallet,
                      f"Se retiraron {tomado} cajas del rack {c.rack}-{c.nivel}-Pos {c.posicion}. "
@@ -1216,7 +1195,7 @@ def picking():
                     """
                     INSERT INTO tbl_movimientos
                         (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (%s, 'Despacho', %s, %s)
+                    VALUES (?, 'Despacho', %s, %s)
                     """,
                     (stock.id_pallet_origen,
                      f"Se despacharon {tomado} cajas desde piso P-N1-Pos {stock.posicion}. "
@@ -1308,7 +1287,7 @@ def editar_pallet(id_pallet):
         ids_que_quedan = [int(i) for i in ids_pallet_producto if i]
 
         if ids_que_quedan:
-            placeholders = ",".join("%s" * len(ids_que_quedan))
+            placeholders = ",".join("?" * len(ids_que_quedan))
             cursor.execute(
                 f"DELETE FROM tbl_pallet_producto WHERE id_pallet = %s AND id_pallet_producto NOT IN ({placeholders})",
                 (id_pallet, *ids_que_quedan)
@@ -1349,7 +1328,7 @@ def editar_pallet(id_pallet):
         cursor.execute(
             """
             INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (%s, 'Edicion', %s)
+            VALUES (?, 'Edicion', %s)
             """,
             (id_pallet, f"Editado por {session.get('nombre')}")
         )
@@ -1383,6 +1362,9 @@ def editar_pallet(id_pallet):
 # ---------------------------------------------------------------
 # Mantenedor de Usuarios (solo Administrador)
 # ---------------------------------------------------------------
+
+from werkzeug.security import generate_password_hash
+
 
 @app.route("/usuarios", methods=["GET", "POST"])
 @admin_requerido
@@ -1807,7 +1789,7 @@ def despachar_pallet(id_pallet):
             """
             INSERT INTO tbl_movimientos
                 (id_pallet, tipo_movimiento, observacion, destino_tipo)
-            VALUES (%s, 'Despacho', %s, %s)
+            VALUES (?, 'Despacho', %s, %s)
             """,
             (id_pallet,
              f"Pallet completo despachado ({total_en_pallet} cajas). Destino: {destino_texto}.",
@@ -1965,7 +1947,7 @@ def despachar_pallet(id_pallet):
             """
             INSERT INTO tbl_movimientos
                 (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente)
-            VALUES (%s, 'Picking', %s, 'Piso', NULL)
+            VALUES (?, 'Picking', %s, 'Piso', NULL)
             """,
             (id_pallet,
              f"Se retiraron {cantidad_solicitada - restante} cajas del pallet. Llevadas a piso.")
@@ -1986,3 +1968,4 @@ def despachar_pallet(id_pallet):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
+
