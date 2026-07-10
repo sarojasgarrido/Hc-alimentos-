@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block titulo %}Buscar pallets{% endblock %}
+{% block contenido %}
+    <h2>Buscar pallets</h2>
+
+    <div class="form-box" style="max-width:900px;">
+        <form method="GET">
+            <label>Proveedor</label>
+            <select name="id_proveedor">
+                <option value="">Todos</option>
+                {% for pr in proveedores %}
+                <option value="{{ pr.id_proveedor }}" {% if filtros.id_proveedor == pr.id_proveedor|string %}selected{% endif %}>{{ pr.nombre }}</option>
+                {% endfor %}
+            </select>
+
+            <label>Producto</label>
+            <select name="id_producto">
+                <option value="">Todos</option>
+                {% for p in productos %}
+                <option value="{{ p.id_producto }}" {% if filtros.id_producto == p.id_producto|string %}selected{% endif %}>{{ p.nombre }}</option>
+                {% endfor %}
+            </select>
+
+            <label>Factura</label>
+            <input type="text" name="factura" value="{{ filtros.factura or '' }}" placeholder="N de factura">
+
+            <label>Estado</label>
+            <select name="estado">
+                <option value="">Todos</option>
+                <option value="Activo" {% if filtros.estado == 'Activo' %}selected{% endif %}>Activo</option>
+                <option value="Picking" {% if filtros.estado == 'Picking' %}selected{% endif %}>Picking</option>
+                <option value="Consumido" {% if filtros.estado == 'Consumido' %}selected{% endif %}>Consumido</option>
+            </select>
+
+            <br><br>
+            <button type="submit">Buscar</button>
+            <a href="{{ url_for('buscar_pallets') }}" style="margin-left:10px; font-size:14px;">Limpiar filtros</a>
+        </form>
+    </div>
+
+    <br>
+
+    {% if resultados is not none %}
+        <p>{{ resultados|length }} pallet(s) encontrado(s).</p>
+        <div class="scroll-box">
+        <table>
+            <tr>
+                <th>Pallet</th>
+                <th>Proveedor</th>
+                <th>Factura</th>
+                <th>Ubicacion</th>
+                <th>Estado</th>
+                <th>Fecha ingreso</th>
+                <th></th>
+            </tr>
+            {% for r in resultados %}
+            <tr>
+                <td>{{ r.id_pallet }}</td>
+                <td>{{ r.proveedor }}</td>
+                <td>{{ r.factura or "-" }}</td>
+                <td>
+                    {% if r.rack %}{{ r.rack }}-{{ r.nivel }}-{{ r.posicion }}{% else %}-{% endif %}
+                </td>
+                <td>
+                    {% if r.estado == 'Activo' %}
+                        <span class="badge badge-activo">Activo</span>
+                    {% elif r.estado == 'Picking' %}
+                        <span class="badge badge-picking">Picking</span>
+                    {% else %}
+                        <span class="badge badge-consumido">{{ r.estado }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ r.fecha_ingreso }}</td>
+                <td><a href="{{ url_for('ver_pallet', id_pallet=r.id_pallet) }}">Ver detalle</a></td>
+            </tr>
+            {% endfor %}
+        </table>
+        </div>
+    {% endif %}
+{% endblock %}
