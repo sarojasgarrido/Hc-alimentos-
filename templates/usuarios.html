@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block titulo %}Usuarios{% endblock %}
+{% block contenido %}
+    <h2>Usuarios</h2>
+
+    {% if mensaje %}
+        <p class="mensaje">{{ mensaje }}</p>
+    {% endif %}
+    {% if error %}
+        <p class="mensaje" style="background-color:#FBE9E5; color:#8C2E1F;">{{ error }}</p>
+    {% endif %}
+
+    <div class="form-box" style="max-width:520px;">
+        <h3>Crear nuevo operador</h3>
+        <p style="font-size:13px; color:#5C564E; margin-top:0;">
+            Solo se pueden crear usuarios con rol Operador desde aqui.
+            Para crear otro Administrador, hay que hacerlo desde el script crear_admin.py.
+        </p>
+        <form method="POST">
+            <label>Nombre completo</label>
+            <input type="text" name="nombre" required>
+
+            <label>Usuario (para iniciar sesion)</label>
+            <input type="text" name="usuario" required>
+
+            <label>Clave inicial</label>
+            <input type="password" name="clave" required>
+
+            <br><br>
+            <button type="submit">Crear operador</button>
+        </form>
+    </div>
+
+    <h3 style="margin-top:25px;">Usuarios existentes</h3>
+    <div class="scroll-box">
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Activo</th>
+            <th>Acciones</th>
+        </tr>
+        {% for u in usuarios %}
+        <tr>
+            <td>{{ u.id_usuario }}</td>
+            <td>{{ u.nombre }}</td>
+            <td>{{ u.usuario }}</td>
+            <td>{{ u.rol }}</td>
+            <td>{{ "Si" if u.activo else "No" }}</td>
+            <td>
+                <a class="accion-editar" href="#"
+                   onclick="document.getElementById('form-clave-{{ u.id_usuario }}').style.display='block'; return false;">
+                    Cambiar clave
+                </a>
+                {% if u.id_usuario != session.get('usuario_id') %}
+                <a class="accion-eliminar" href="{{ url_for('desactivar_usuario', id_usuario=u.id_usuario) }}"
+                   onclick="return confirm('Cambiar estado activo de este usuario?');">
+                    {{ "Desactivar" if u.activo else "Activar" }}
+                </a>
+                {% endif %}
+
+                <div id="form-clave-{{ u.id_usuario }}" style="display:none; margin-top:8px;">
+                    <form method="POST" action="{{ url_for('cambiar_clave_usuario', id_usuario=u.id_usuario) }}" style="display:inline;">
+                        <input type="password" name="nueva_clave" placeholder="Nueva clave" required style="padding:4px;">
+                        <button type="submit" style="padding:4px 10px; font-size:12px;">Guardar</button>
+                    </form>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block titulo %}Picking y Despacho{% endblock %}
+{% block contenido %}
+    <h2>Picking y Despacho</h2>
+
+    {% if error %}
+        <p class="mensaje" style="background-color:#FBE9E5; color:#8C2E1F;">{{ error }}</p>
+    {% endif %}
+
+    <!-- ============================================ -->
+    <!-- SECCION 1: PICKING (rack -> piso)            -->
+    <!-- ============================================ -->
+    <div class="form-box" style="max-width:650px;">
+        <h3 style="margin-top:0;">1. Picking: sacar del rack al piso</h3>
+        <p style="font-size:13px; color:#5C564E;">Selecciona un producto. El sistema toma del pallet con vencimiento mas proximo (FEFO) y lo lleva a la zona de piso.</p>
+        <form method="POST">
+            <input type="hidden" name="accion" value="picking">
+
+            <label>Producto</label>
+            <select name="id_producto" id="select-producto" onchange="consultarDisponibilidad()" required>
+                <option value="" disabled selected>Selecciona un producto</option>
+                {% for p in productos %}
+                <option value="{{ p.id_producto }}">{{ p.nombre }}</option>
+                {% endfor %}
+            </select>
+
+            <div id="info-disponibilidad" style="margin-top:10px;"></div>
+
+            <label>Cantidad de cajas a bajar al piso</label>
+            <input type="number" name="cantidad" min="1" required>
+
+            <br><br>
+            <button type="submit">Ejecutar picking (rack -> piso)</button>
+        </form>
+    </div>
+
+    <br><hr style="border:none; border-top:2px solid var(--gris-borde);"><br>
+
+    <!-- ============================================ -->
+    <!-- SECCION 2: DESPACHO (piso -> fuera)          -->
+    <!-- ============================================ -->
+    <h3>2. Despacho: sacar del piso a produccion o empresa</h3>
+    <p style="font-size:13px; color:#5C564E;">Selecciona el stock suelto que quieres despachar y elige el destino.</p>
+
+    {% if stock_piso %}
+    <div class="scroll-box">
+    <table>
+        <tr>
+            <th>Posicion</th>
+            <th>Producto</th>
+            <th>Cantidad en piso</th>
+            <th>Vencimiento</th>
+            <th>Pallet origen</th>
+            <th>Despachar</th>
+        </tr>
+        {% for sp in stock_piso %}
+        <tr>
+            <td>P-N1-Pos {{ sp.posicion }}</td>
+            <td>{{ sp.producto }}</td>
+            <td>{{ sp.cantidad }}</td>
+            <td>{{ sp.fecha_vencimiento or "-" }}</td>
+            <td>{% if sp.id_pallet %}<a href="{{ url_for('ver_pallet', id_pallet=sp.id_pallet) }}">Pallet {{ sp.id_pallet }}</a>{% else %}-{% endif %}</td>
+            <td>
+                <form method="POST" style="display:flex; gap:4px; align-items:center;">
+                    <input type="hidden" name="accion" value="despacho">
+                    <input type="hidden" name="id_stock_piso" value="{{ sp.id_stock_piso }}">
+                    <input type="number" name="cantidad_despacho" min="1" max="{{ sp.cantidad }}" placeholder="Cant." style="width:70px; padding:4px;" required>
+                    <select name="destino_tipo" style="padding:4px; font-size:12px;">
+                        <option value="Produccion1">Sala prod. 1</option>
+                        <option value="Produccion2">Sala prod. 2</option>
+                        <option value="PlantaPrincipal">Planta principal</option>
+                    </select>
+                    <button type="submit" style="padding:4px 10px; font-size:12px;">Despachar</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% else %}
+    <p>No hay stock suelto en la zona de piso. Primero haz un picking para bajar cajas de los racks.</p>
+    {% endif %}
+
+    <br><hr style="border:none; border-top:2px solid var(--gris-borde);"><br>
+
+    <h3>Buscar un pallet especifico</h3>
+    <div class="form-box" style="max-width:400px;">
+        <label>N de pallet</label>
+        <input type="number" id="buscar-pallet" min="1" placeholder="Ej: 5">
+        <br><br>
+        <button type="button" onclick="irAPallet()">Ver pallet</button>
+    </div>
+
+    <script>
+        function irAPallet() {
+            const id = document.getElementById('buscar-pallet').value;
+            if (id) window.location.href = "/pallets/detalle/" + id;
+        }
+
+        async function consultarDisponibilidad() {
+            const idProducto = document.getElementById('select-producto').value;
+            const div = document.getElementById('info-disponibilidad');
+            if (!idProducto) { div.innerHTML = ''; return; }
+
+            div.innerHTML = '<p style="color:#5C564E;">Consultando...</p>';
+
+            try {
+                const resp = await fetch('/picking/disponibilidad/' + idProducto);
+                const data = await resp.json();
+
+                if (!data.disponible) {
+                    div.innerHTML = '<p style="background-color:#FBE9E5; color:#8C2E1F; padding:10px; border-radius:6px;">' +
+                        '<strong>Sin stock</strong> de este producto en bodega.</p>';
+                    return;
+                }
+
+                let html = '<div style="background-color:#E8F0E5; color:#3C6B3F; padding:10px; border-radius:6px;">' +
+                    '<strong>En racks:</strong> ' + data.total_en_racks + ' cajas | ' +
+                    '<strong>En piso (sueltas):</strong> ' + data.total_en_piso + ' cajas | ' +
+                    '<strong>Total:</strong> ' + data.total_disponible + ' cajas</div>';
+
+                if (data.pallets.length > 0) {
+                    html += '<p style="font-size:13px; margin-top:8px;">Pallets en racks (el picking sacara de estos por FEFO):</p>';
+                    html += '<table style="margin-top:4px;"><tr><th>#</th><th>Pallet</th><th>Ubicacion</th><th>Cantidad</th><th>Vencimiento</th></tr>';
+                    data.pallets.forEach((p, i) => {
+                        const venc = p.fecha_vencimiento || '-';
+                        html += '<tr><td>' + (i+1) + '</td>' +
+                                '<td><a href="/pallets/detalle/' + p.id_pallet + '" target="_blank">' + p.id_pallet + '</a></td>' +
+                                '<td>' + p.ubicacion + '</td>' +
+                                '<td>' + p.cantidad + ' / ' + p.cantidad_original + '</td>' +
+                                '<td>' + venc + '</td></tr>';
+                    });
+                    html += '</table>';
+                }
+
+                div.innerHTML = html;
+            } catch (e) {
+                div.innerHTML = '<p style="color:#8C2E1F;">Error consultando disponibilidad.</p>';
+            }
+        }
+    </script>
+{% endblock %}

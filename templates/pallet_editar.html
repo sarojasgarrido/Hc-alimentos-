@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block titulo %}Editar pallet{% endblock %}
+{% block contenido %}
+    <h2>Editar pallet N° {{ pallet.id_pallet }}</h2>
+
+    <div class="form-box" style="max-width:700px;">
+        <form method="POST">
+            <label>Proveedor</label>
+            <select name="id_proveedor" required>
+                {% for pr in proveedores %}
+                <option value="{{ pr.id_proveedor }}" {% if pr.id_proveedor == pallet.id_proveedor %}selected{% endif %}>{{ pr.nombre }}</option>
+                {% endfor %}
+            </select>
+
+            <label>N de factura</label>
+            <input type="text" name="factura" value="{{ pallet.factura or '' }}">
+
+            <h3>Productos en este pallet</h3>
+            <div id="filas-productos">
+                {% for item in items %}
+                <div class="fila-producto" style="border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:4px;">
+                    <input type="hidden" name="id_pallet_producto[]" value="{{ item.id_pallet_producto }}">
+
+                    <label>Producto</label>
+                    <select name="id_producto[]" required>
+                        {% for p in productos %}
+                        <option value="{{ p.id_producto }}" {% if p.id_producto == item.id_producto %}selected{% endif %}>{{ p.nombre }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <label>Cantidad actual</label>
+                    <input type="number" name="cantidad[]" min="0" value="{{ item.cantidad }}" required>
+
+                    <label>Cantidad original (con la que llego)</label>
+                    <input type="number" name="cantidad_original[]" min="1" value="{{ item.cantidad_original }}" required>
+
+                    <label>Fecha de elaboracion</label>
+                    <input type="date" name="fecha_elaboracion[]" value="{{ item.fecha_elaboracion or '' }}">
+
+                    <label>Fecha de vencimiento</label>
+                    <input type="date" name="fecha_vencimiento[]" value="{{ item.fecha_vencimiento or '' }}">
+
+                    <button type="button" class="quitar-fila" onclick="quitarFila(this)" style="background-color:#d9534f; margin-top:8px;">Quitar producto</button>
+                </div>
+                {% endfor %}
+            </div>
+
+            <button type="button" onclick="agregarFila()">+ Agregar otro producto</button>
+
+            <br><br>
+            <button type="submit">Guardar cambios</button>
+        </form>
+    </div>
+
+    <p style="margin-top:15px;"><a href="{{ url_for('ver_pallet', id_pallet=pallet.id_pallet) }}">Cancelar y volver</a></p>
+
+    <script>
+        function agregarFila() {
+            const filas = document.getElementById('filas-productos');
+            const plantilla = filas.children[0];
+            if (!plantilla) {
+                alert('Necesitas al menos una fila existente para clonar.');
+                return;
+            }
+            const nueva = plantilla.cloneNode(true);
+            // Vaciar el id_pallet_producto (es nuevo)
+            const hidden = nueva.querySelector('input[name="id_pallet_producto[]"]');
+            if (hidden) hidden.value = '';
+            nueva.querySelectorAll('input[type=number], input[type=date]').forEach(i => i.value = '');
+            nueva.querySelectorAll('select').forEach(s => s.selectedIndex = 0);
+            filas.appendChild(nueva);
+        }
+
+        function quitarFila(boton) {
+            const filas = document.getElementById('filas-productos');
+            if (filas.children.length > 1) {
+                boton.closest('.fila-producto').remove();
+            } else {
+                alert('El pallet debe tener al menos un producto.');
+            }
+        }
+    </script>
+{% endblock %}

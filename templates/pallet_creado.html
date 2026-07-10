@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block titulo %}Pallet registrado{% endblock %}
+{% block contenido %}
+    <h2>Pallet registrado correctamente</h2>
+
+    <div class="form-box">
+        <p><strong>Pallet N°:</strong> {{ id_pallet }}</p>
+        <p><strong>Ubicacion asignada:</strong> {{ rack }} - {{ nivel }} - Posicion {{ posicion }}</p>
+        <p><strong>Codigo QR:</strong> {{ codigo_qr }}</p>
+        <img src="data:image/png;base64,{{ qr_base64 }}" alt="QR del pallet" width="220">
+        <p style="font-size:13px; color:#666;">Link directo: {{ url_consulta }}</p>
+    </div>
+
+    <br>
+    <p><a href="{{ url_for('nuevo_pallet') }}">Ingresar otro pallet</a></p>
+{% endblock %}
