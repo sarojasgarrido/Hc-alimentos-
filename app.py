@@ -143,7 +143,7 @@ def dashboard():
         JOIN tbl_productos pr ON pr.id_producto = pp.id_producto
         JOIN tbl_pallets pa ON pa.id_pallet = pp.id_pallet
         LEFT JOIN tbl_pallet_ubicacion pu
-            ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+            ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
         LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
         WHERE pp.cantidad > 0
             AND pp.fecha_vencimiento IS NOT NULL
@@ -167,7 +167,7 @@ def dashboard():
                END AS total_cantidad
         FROM tbl_ubicaciones u
         LEFT JOIN tbl_pallet_ubicacion pu
-            ON pu.id_ubicacion = u.id_ubicacion AND pu.vigente = 1
+            ON pu.id_ubicacion = u.id_ubicacion AND pu.vigente = TRUE
         LEFT JOIN tbl_pallets pa ON pa.id_pallet = pu.id_pallet
         LEFT JOIN tbl_empresas e ON e.id_empresa = pa.id_proveedor
         """
@@ -373,7 +373,7 @@ def dashboard():
             WHERE m.tipo_movimiento IN ('Picking', 'Despacho')
             GROUP BY pp.id_producto
         ) movs_all ON movs_all.id_producto = p.id_producto
-        WHERE p.activo = 1
+        WHERE p.activo = TRUE
             AND (COALESCE(rack_stock.total, 0) + COALESCE(piso_stock.total, 0) > 0
                  OR COALESCE(movs_all.cnt, 0) > 0)
         ORDER BY movs30.cnt DESC, p.nombre
@@ -473,7 +473,7 @@ def editar_producto(id_producto):
         codigo = request.form.get("codigo") or None
         nombre = request.form["nombre"]
         unidad = request.form.get("unidad") or None
-        activo = 1 if request.form.get("activo") else 0
+        activo = True if request.form.get("activo") else False
 
         cursor.execute(
             """
@@ -526,8 +526,8 @@ def empresas():
         telefono = request.form.get("telefono") or None
         correo = request.form.get("correo") or None
         direccion = request.form.get("direccion") or None
-        es_proveedor = 1 if request.form.get("es_proveedor") else 0
-        es_cliente = 1 if request.form.get("es_cliente") else 0
+        es_proveedor = True if request.form.get("es_proveedor") else False
+        es_cliente = True if request.form.get("es_cliente") else False
 
         cursor.execute(
             """
@@ -565,9 +565,9 @@ def editar_empresa(id_empresa):
         telefono = request.form.get("telefono") or None
         correo = request.form.get("correo") or None
         direccion = request.form.get("direccion") or None
-        es_proveedor = 1 if request.form.get("es_proveedor") else 0
-        es_cliente = 1 if request.form.get("es_cliente") else 0
-        activo = 1 if request.form.get("activo") else 0
+        es_proveedor = True if request.form.get("es_proveedor") else False
+        es_cliente = True if request.form.get("es_cliente") else False
+        activo = True if request.form.get("activo") else False
 
         cursor.execute(
             """
@@ -631,11 +631,11 @@ def nuevo_pallet():
 
         def recargar_formulario(mensaje_error):
             cursor.execute(
-                "SELECT id_producto, nombre FROM tbl_productos WHERE activo = 1 ORDER BY nombre"
+                "SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre"
             )
             productos = cursor.fetchall()
             cursor.execute(
-                "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = 1 AND activo = 1 ORDER BY nombre"
+                "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE AND activo = TRUE ORDER BY nombre"
             )
             proveedores = cursor.fetchall()
             conn.close()
@@ -748,11 +748,11 @@ def nuevo_pallet():
         )
 
     cursor.execute(
-        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = 1 ORDER BY nombre"
+        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre"
     )
     productos = cursor.fetchall()
     cursor.execute(
-        "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = 1 AND activo = 1 ORDER BY nombre"
+        "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE AND activo = TRUE ORDER BY nombre"
     )
     proveedores = cursor.fetchall()
     conn.close()
@@ -789,7 +789,7 @@ def consulta_pallet_detalle(codigo_qr):
         )
 
     cursor.execute(
-        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = 1 AND activo = 1 ORDER BY nombre"
+        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = TRUE AND activo = TRUE ORDER BY nombre"
     )
     clientes = cursor.fetchall()
     conn.close()
@@ -811,7 +811,7 @@ def obtener_pallet_y_items(cursor, condicion_sql, parametro):
         FROM tbl_pallets pa
         JOIN tbl_empresas pv ON pv.id_empresa = pa.id_proveedor
         LEFT JOIN tbl_pallet_ubicacion pu
-            ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+            ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
         LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
         WHERE {condicion_sql}
         """,
@@ -851,7 +851,7 @@ def ver_pallet(id_pallet):
         return render_template("consulta_pallet.html", error="Pallet no encontrado.")
 
     cursor.execute(
-        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = 1 AND activo = 1 ORDER BY nombre"
+        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = TRUE AND activo = TRUE ORDER BY nombre"
     )
     clientes = cursor.fetchall()
     conn.close()
@@ -903,7 +903,7 @@ def buscar_pallets():
             FROM tbl_pallets pa
             JOIN tbl_empresas pv ON pv.id_empresa = pa.id_proveedor
             LEFT JOIN tbl_pallet_ubicacion pu
-                ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+                ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
             LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
             WHERE {" AND ".join(condiciones)}
             ORDER BY pa.fecha_ingreso DESC
@@ -911,7 +911,7 @@ def buscar_pallets():
         cursor.execute(consulta, tuple(parametros))
         resultados = cursor.fetchall()
 
-    cursor.execute("SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = 1 ORDER BY nombre")
+    cursor.execute("SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE ORDER BY nombre")
     proveedores = cursor.fetchall()
     cursor.execute("SELECT id_producto, nombre FROM tbl_productos ORDER BY nombre")
     productos = cursor.fetchall()
@@ -968,7 +968,7 @@ def picking():
                 FROM tbl_pallet_producto pp
                 JOIN tbl_pallets pa ON pa.id_pallet = pp.id_pallet
                 LEFT JOIN tbl_pallet_ubicacion pu
-                    ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+                    ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
                 LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
                 WHERE pp.id_producto = %s AND pp.cantidad > 0 AND pa.estado != 'Consumido'
                     AND (u.rack LIKE 'R%' OR u.rack IS NULL)
@@ -1023,7 +1023,7 @@ def picking():
                         (c.id_pallet,)
                     )
                     cursor.execute(
-                        "UPDATE tbl_pallet_ubicacion SET vigente = 0 WHERE id_pallet = %s AND vigente = 1",
+                        "UPDATE tbl_pallet_ubicacion SET vigente = FALSE WHERE id_pallet = %s AND vigente = TRUE",
                         (c.id_pallet,)
                     )
                     if c.id_ubicacion:
@@ -1226,12 +1226,12 @@ def picking():
 
     # GET: formulario
     cursor.execute(
-        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = 1 ORDER BY nombre"
+        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre"
     )
     productos = cursor.fetchall()
 
     cursor.execute(
-        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = 1 AND activo = 1 ORDER BY nombre"
+        "SELECT id_empresa AS id_cliente, nombre FROM tbl_empresas WHERE es_cliente = TRUE AND activo = TRUE ORDER BY nombre"
     )
     clientes = cursor.fetchall()
 
@@ -1344,11 +1344,11 @@ def editar_pallet(id_pallet):
         return "Pallet no encontrado.", 404
 
     cursor.execute(
-        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = 1 ORDER BY nombre"
+        "SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre"
     )
     productos = cursor.fetchall()
     cursor.execute(
-        "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = 1 AND activo = 1 ORDER BY nombre"
+        "SELECT id_empresa AS id_proveedor, nombre FROM tbl_empresas WHERE es_proveedor = TRUE AND activo = TRUE ORDER BY nombre"
     )
     proveedores = cursor.fetchall()
     conn.close()
@@ -1417,7 +1417,7 @@ def desactivar_usuario(id_usuario):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE tbl_usuarios SET activo = CASE WHEN activo = 1 THEN 0 ELSE 1 END WHERE id_usuario = %s",
+        "UPDATE tbl_usuarios SET activo = CASE WHEN activo = TRUE THEN 0 ELSE 1 END WHERE id_usuario = %s",
         (id_usuario,)
     )
     conn.commit()
@@ -1462,7 +1462,7 @@ def detalle_panel(vista):
             SELECT u.rack, u.nivel, u.posicion, u.estado, pa.id_pallet
             FROM tbl_ubicaciones u
             LEFT JOIN tbl_pallet_ubicacion pu
-                ON pu.id_ubicacion = u.id_ubicacion AND pu.vigente = 1
+                ON pu.id_ubicacion = u.id_ubicacion AND pu.vigente = TRUE
             LEFT JOIN tbl_pallets pa ON pa.id_pallet = pu.id_pallet
             ORDER BY
                 CAST(SUBSTRING(u.rack FROM 2) AS INTEGER),
@@ -1484,7 +1484,7 @@ def detalle_panel(vista):
             FROM tbl_pallets pa
             JOIN tbl_empresas pv ON pv.id_empresa = pa.id_proveedor
             LEFT JOIN tbl_pallet_ubicacion pu
-                ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+                ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
             LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
             WHERE pa.estado != 'Consumido'
             ORDER BY pa.fecha_ingreso DESC
@@ -1523,7 +1523,7 @@ def detalle_panel(vista):
             JOIN tbl_productos pr ON pr.id_producto = pp.id_producto
             JOIN tbl_pallets pa ON pa.id_pallet = pp.id_pallet
             LEFT JOIN tbl_pallet_ubicacion pu
-                ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+                ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
             LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
             WHERE pp.cantidad > 0
                 AND pp.fecha_vencimiento IS NOT NULL
@@ -1571,7 +1571,7 @@ def disponibilidad_producto(id_producto):
         FROM tbl_pallet_producto pp
         JOIN tbl_pallets pa ON pa.id_pallet = pp.id_pallet
         LEFT JOIN tbl_pallet_ubicacion pu
-            ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+            ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
         LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
         WHERE pp.id_producto = %s AND pp.cantidad > 0 AND pa.estado != 'Consumido'
             AND (u.rack LIKE 'R%' OR u.rack IS NULL)
@@ -1741,7 +1741,7 @@ def despachar_pallet(id_pallet):
         SELECT pa.id_pallet, pa.estado, pu.id_ubicacion
         FROM tbl_pallets pa
         LEFT JOIN tbl_pallet_ubicacion pu
-            ON pu.id_pallet = pa.id_pallet AND pu.vigente = 1
+            ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
         WHERE pa.id_pallet = %s AND pa.estado != 'Consumido'
         """,
         (id_pallet,)
@@ -1776,7 +1776,7 @@ def despachar_pallet(id_pallet):
             (id_pallet,)
         )
         cursor.execute(
-            "UPDATE tbl_pallet_ubicacion SET vigente = 0 WHERE id_pallet = %s AND vigente = 1",
+            "UPDATE tbl_pallet_ubicacion SET vigente = FALSE WHERE id_pallet = %s AND vigente = TRUE",
             (id_pallet,)
         )
         if pallet.id_ubicacion:
@@ -1934,7 +1934,7 @@ def despachar_pallet(id_pallet):
                 (id_pallet,)
             )
             cursor.execute(
-                "UPDATE tbl_pallet_ubicacion SET vigente = 0 WHERE id_pallet = %s AND vigente = 1",
+                "UPDATE tbl_pallet_ubicacion SET vigente = FALSE WHERE id_pallet = %s AND vigente = TRUE",
                 (id_pallet,)
             )
             if pallet.id_ubicacion:
@@ -1968,4 +1968,5 @@ def despachar_pallet(id_pallet):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
+
 
