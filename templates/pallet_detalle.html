@@ -48,9 +48,11 @@
 
     {% if pallet.estado != 'Consumido' %}
     <div class="form-box" style="max-width:500px; margin-bottom:16px;">
-        <h3 style="margin-top:0;">Despachar este pallet</h3>
+        <h3 style="margin-top:0;">Despachar / Mover pallet</h3>
         <p style="font-size:12px; color:#5C564E; margin-top:0;">
-            Si dejas la cantidad vacia se despacha el pallet completo. Si pones una cantidad, esas cajas van a la zona de piso (picking).
+            Deja la cantidad vacia para despachar el pallet completo.
+            Si pones una cantidad y eliges una sala o planta, esas cajas SALEN de la bodega.
+            Si eliges "Mover a zona de picking", esas cajas quedan en piso para picking futuro.
         </p>
         <form method="POST" action="{{ url_for('despachar_pallet', id_pallet=pallet.id_pallet) }}">
             <label>Cantidad de cajas (vacio = pallet completo)</label>
@@ -58,13 +60,14 @@
 
             <label>Destino</label>
             <select name="destino_tipo">
-                <option value="Produccion1">Sala de produccion 1</option>
-                <option value="Produccion2">Sala de produccion 2</option>
-                <option value="PlantaPrincipal">Planta principal HC Alimentos</option>
+                <option value="Produccion1">Sala de produccion 1 (salida)</option>
+                <option value="Produccion2">Sala de produccion 2 (salida)</option>
+                <option value="PlantaPrincipal">Planta principal HC Alimentos (salida)</option>
+                <option value="Piso">Mover a zona de picking (no es salida)</option>
             </select>
 
             <br>
-            <button type="submit" style="background-color:#C8311F;">Despachar</button>
+            <button type="submit" style="background-color:#C8311F;">Despachar / Mover</button>
         </form>
     </div>
     {% endif %}
@@ -87,3 +90,4 @@
     </p>
     <p><a href="{{ url_for('consulta_pallet') }}">Buscar otro pallet</a></p>
 {% endblock %}
+
