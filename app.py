@@ -971,7 +971,7 @@ def picking():
                     ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
                 LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
                 WHERE pp.id_producto = %s AND pp.cantidad > 0 AND pa.estado != 'Consumido'
-                    AND (u.rack LIKE 'R%' OR u.rack IS NULL)
+                    AND (u.rack LIKE 'R%%' OR u.rack IS NULL)
                 ORDER BY
                     CASE WHEN pp.fecha_vencimiento IS NULL THEN 1 ELSE 0 END,
                     pp.fecha_vencimiento ASC
@@ -1574,7 +1574,7 @@ def disponibilidad_producto(id_producto):
             ON pu.id_pallet = pa.id_pallet AND pu.vigente = TRUE
         LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = pu.id_ubicacion
         WHERE pp.id_producto = %s AND pp.cantidad > 0 AND pa.estado != 'Consumido'
-            AND (u.rack LIKE 'R%' OR u.rack IS NULL)
+            AND (u.rack LIKE 'R%%' OR u.rack IS NULL)
         ORDER BY
             CASE WHEN pp.cantidad < pp.cantidad_original
                       AND EXISTS (SELECT 1 FROM tbl_movimientos m
