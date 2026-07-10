@@ -24,7 +24,7 @@
         <div class="scroll-box">
             <table>
                 <tr>
-                    <th>Código</th>
+                    <th>Código SKU</th>
                     <th>Nombre</th>
                     <th>Unidad</th>
                     <th>Estado</th>
@@ -47,7 +47,7 @@
                     {% if session.get('rol') == 'Administrador' %}
                     <td>
                         <a href="{{ url_for('editar_producto', id_producto=p.id_producto) }}" style="color:#2c7be5; text-decoration:none; margin-right:10px; font-weight:600;">Editar</a>
-                        <a href="{{ url_for('eliminar_producto', id_producto=p.id_producto) }}" style="color:#C8311F; text-decoration:none; font-weight:600;" onclick="return confirm('¿Seguro que deseas eliminar este producto?');">Eliminar</a>
+                        <a href="{{ url_for('eliminar_producto', id_producto=p.id_producto) }}" style="color:#C8311F; text-decoration:none; font-weight:600;" onclick="return confirm('¿Seguro que deseas eliminar este producto permanentemente?');">Eliminar</a>
                     </td>
                     {% endif %}
                 </tr>
