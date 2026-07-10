@@ -1465,8 +1465,9 @@ def detalle_panel(vista):
                 ON pu.id_ubicacion = u.id_ubicacion AND pu.vigente = TRUE
             LEFT JOIN tbl_pallets pa ON pa.id_pallet = pu.id_pallet
             ORDER BY
-                CAST(SUBSTRING(u.rack FROM 2) AS INTEGER),
-                CAST(SUBSTRING(u.nivel FROM 2) AS INTEGER),
+                CASE WHEN u.rack LIKE 'R%%' THEN 0 ELSE 1 END,
+                CASE WHEN u.rack LIKE 'R%%' THEN CAST(SUBSTRING(u.rack FROM 2) AS INTEGER) ELSE 0 END,
+                CASE WHEN u.nivel LIKE 'N%%' THEN CAST(SUBSTRING(u.nivel FROM 2) AS INTEGER) ELSE 0 END,
                 CAST(u.posicion AS INTEGER)
             """
         )
