@@ -1817,111 +1817,161 @@ def despachar_pallet(id_pallet):
 
     else:
         # ============================================
-        # PICKING PARCIAL: cajas van al piso
+        # DESPACHO / MOVIMIENTO PARCIAL
         # ============================================
         cantidad_solicitada = int(cantidad_raw)
-        capacidad_piso = CAJAS_POR_PALLET_ESTANDAR
-
-        cursor.execute(
-            """
-            SELECT id_ubicacion, rack, nivel, posicion
-            FROM tbl_ubicaciones
-            WHERE rack = 'P' AND estado = 'Libre'
-            ORDER BY CAST(posicion AS INTEGER)
-            """
-        )
-        posiciones_piso_libres = cursor.fetchall()
-        piso_idx = 0
-
-        restante = cantidad_solicitada
-        movimientos = []
 
         # Tomar de los productos por FEFO
         productos_ordenados = sorted(productos, key=lambda p: p.fecha_vencimiento or "9999-12-31")
 
-        for p in productos_ordenados:
-            if restante <= 0:
-                break
+        restante = cantidad_solicitada
+        movimientos = []
 
-            tomado = min(p.cantidad, restante)
-            nueva_cantidad = p.cantidad - tomado
-            restante -= tomado
+        if destino_tipo == "Piso":
+            # ==== MOVIMIENTO A ZONA DE PICKING (no es salida) ====
+            capacidad_piso = CAJAS_POR_PALLET_ESTANDAR
 
             cursor.execute(
-                "UPDATE tbl_pallet_producto SET cantidad = %s WHERE id_pallet_producto = %s",
-                (nueva_cantidad, p.id_pallet_producto)
+                """
+                SELECT id_ubicacion, rack, nivel, posicion
+                FROM tbl_ubicaciones
+                WHERE rack = 'P' AND estado = 'Libre'
+                ORDER BY CAST(posicion AS INTEGER)
+                """
+            )
+            posiciones_piso_libres = cursor.fetchall()
+            piso_idx = 0
+
+            for p in productos_ordenados:
+                if restante <= 0:
+                    break
+                tomado = min(p.cantidad, restante)
+                nueva_cantidad = p.cantidad - tomado
+                restante -= tomado
+
+                cursor.execute(
+                    "UPDATE tbl_pallet_producto SET cantidad = %s WHERE id_pallet_producto = %s",
+                    (nueva_cantidad, p.id_pallet_producto)
+                )
+
+                cantidad_a_colocar = tomado
+                venc = p.fecha_vencimiento
+                detalle_destinos = []
+
+                while cantidad_a_colocar > 0:
+                    cursor.execute(
+                        """
+                        SELECT sp.id_ubicacion,
+                               u.rack, u.nivel, u.posicion,
+                               (SELECT COALESCE(SUM(cantidad),0) FROM tbl_stock_piso
+                                WHERE id_ubicacion = sp.id_ubicacion) AS total_en_pos
+                        FROM tbl_stock_piso sp
+                        JOIN tbl_ubicaciones u ON u.id_ubicacion = sp.id_ubicacion
+                        WHERE sp.id_producto = %s
+                        GROUP BY sp.id_ubicacion, u.rack, u.nivel, u.posicion
+                        HAVING (SELECT COALESCE(SUM(cantidad),0) FROM tbl_stock_piso
+                                WHERE id_ubicacion = sp.id_ubicacion) < %s
+                        ORDER BY u.rack
+                        LIMIT 1
+                        """,
+                        (p.id_producto, capacidad_piso)
+                    )
+                    pos_existente = cursor.fetchone()
+
+                    if pos_existente:
+                        espacio = capacidad_piso - pos_existente.total_en_pos
+                        a_meter = min(espacio, cantidad_a_colocar)
+                        cursor.execute(
+                            """
+                            INSERT INTO tbl_stock_piso
+                                (id_ubicacion, id_producto, id_pallet_origen, cantidad, fecha_vencimiento)
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (pos_existente.id_ubicacion, p.id_producto, id_pallet, a_meter, venc)
+                        )
+                        detalle_destinos.append(f"P-N1-Pos {pos_existente.posicion} (+{a_meter})")
+                        cantidad_a_colocar -= a_meter
+                    elif piso_idx < len(posiciones_piso_libres):
+                        pos = posiciones_piso_libres[piso_idx]
+                        a_meter = min(capacidad_piso, cantidad_a_colocar)
+                        cursor.execute(
+                            """
+                            INSERT INTO tbl_stock_piso
+                                (id_ubicacion, id_producto, id_pallet_origen, cantidad, fecha_vencimiento)
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (pos.id_ubicacion, p.id_producto, id_pallet, a_meter, venc)
+                        )
+                        cursor.execute(
+                            "UPDATE tbl_ubicaciones SET estado = 'Ocupada' WHERE id_ubicacion = %s",
+                            (pos.id_ubicacion,)
+                        )
+                        detalle_destinos.append(f"P-N1-Pos {pos.posicion} (+{a_meter})")
+                        cantidad_a_colocar -= a_meter
+                        piso_idx += 1
+                    else:
+                        detalle_destinos.append(f"SIN ESPACIO en piso para {cantidad_a_colocar}")
+                        cantidad_a_colocar = 0
+
+                destino_str = ", ".join(detalle_destinos)
+                movimientos.append({
+                    "id_pallet": id_pallet,
+                    "origen": "Pallet " + str(id_pallet),
+                    "tomado": tomado,
+                    "restante_origen": nueva_cantidad,
+                    "fecha_vencimiento": venc,
+                    "posicion_destino": destino_str
+                })
+
+            cursor.execute(
+                """
+                INSERT INTO tbl_movimientos
+                    (id_pallet, tipo_movimiento, observacion, destino_tipo)
+                VALUES (%s, 'Picking', %s, 'Piso')
+                """,
+                (id_pallet,
+                 f"Se movieron {cantidad_solicitada - restante} cajas del pallet a la zona de picking.")
             )
 
-            # Colocar en piso
-            cantidad_a_colocar = tomado
-            venc = p.fecha_vencimiento
-            detalle_destinos = []
+        else:
+            # ==== DESPACHO DIRECTO (salida real de la bodega) ====
+            for p in productos_ordenados:
+                if restante <= 0:
+                    break
+                tomado = min(p.cantidad, restante)
+                nueva_cantidad = p.cantidad - tomado
+                restante -= tomado
 
-            while cantidad_a_colocar > 0:
                 cursor.execute(
-                    """
-                    SELECT sp.id_ubicacion,
-                           u.rack, u.nivel, u.posicion,
-                           (SELECT COALESCE(SUM(cantidad),0) FROM tbl_stock_piso
-                            WHERE id_ubicacion = sp.id_ubicacion) AS total_en_pos
-                    FROM tbl_stock_piso sp
-                    JOIN tbl_ubicaciones u ON u.id_ubicacion = sp.id_ubicacion
-                    WHERE sp.id_producto = %s
-                    GROUP BY sp.id_ubicacion, u.rack, u.nivel, u.posicion
-                    HAVING (SELECT COALESCE(SUM(cantidad),0) FROM tbl_stock_piso
-                            WHERE id_ubicacion = sp.id_ubicacion) < %s
-                    ORDER BY u.rack
-                    LIMIT 1
-                    """,
-                    (p.id_producto, capacidad_piso)
+                    "UPDATE tbl_pallet_producto SET cantidad = %s WHERE id_pallet_producto = %s",
+                    (nueva_cantidad, p.id_pallet_producto)
                 )
-                pos_existente = cursor.fetchone()
 
-                if pos_existente:
-                    espacio = capacidad_piso - pos_existente.total_en_pos
-                    a_meter = min(espacio, cantidad_a_colocar)
-                    cursor.execute(
-                        """
-                        INSERT INTO tbl_stock_piso
-                            (id_ubicacion, id_producto, id_pallet_origen, cantidad, fecha_vencimiento)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (pos_existente.id_ubicacion, p.id_producto, id_pallet, a_meter, venc)
-                    )
-                    detalle_destinos.append(f"P-N1-Pos {pos_existente.posicion} (+{a_meter})")
-                    cantidad_a_colocar -= a_meter
-                elif piso_idx < len(posiciones_piso_libres):
-                    pos = posiciones_piso_libres[piso_idx]
-                    a_meter = min(capacidad_piso, cantidad_a_colocar)
-                    cursor.execute(
-                        """
-                        INSERT INTO tbl_stock_piso
-                            (id_ubicacion, id_producto, id_pallet_origen, cantidad, fecha_vencimiento)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (pos.id_ubicacion, p.id_producto, id_pallet, a_meter, venc)
-                    )
-                    cursor.execute(
-                        "UPDATE tbl_ubicaciones SET estado = 'Ocupada' WHERE id_ubicacion = %s",
-                        (pos.id_ubicacion,)
-                    )
-                    detalle_destinos.append(f"P-N1-Pos {pos.posicion} (+{a_meter})")
-                    cantidad_a_colocar -= a_meter
-                    piso_idx += 1
-                else:
-                    detalle_destinos.append(f"SIN ESPACIO en piso para {cantidad_a_colocar}")
-                    cantidad_a_colocar = 0
+                movimientos.append({
+                    "id_pallet": id_pallet,
+                    "origen": "Pallet " + str(id_pallet),
+                    "tomado": tomado,
+                    "restante_origen": nueva_cantidad,
+                    "fecha_vencimiento": p.fecha_vencimiento,
+                    "posicion_destino": destino_texto + " (salida)"
+                })
 
-            destino_str = ", ".join(detalle_destinos)
-            movimientos.append({
-                "id_pallet": id_pallet,
-                "origen": "Pallet " + str(id_pallet),
-                "tomado": tomado,
-                "restante_origen": nueva_cantidad,
-                "fecha_vencimiento": venc,
-                "posicion_destino": destino_str
-            })
+            cursor.execute(
+                """
+                INSERT INTO tbl_movimientos
+                    (id_pallet, tipo_movimiento, observacion, destino_tipo)
+                VALUES (%s, 'Despacho', %s, %s)
+                """,
+                (id_pallet,
+                 f"Se despacharon {cantidad_solicitada - restante} cajas del pallet. Destino: {destino_texto}.",
+                 destino_tipo)
+            )
 
+        # Revisar si el pallet quedo vacio
+        cursor.execute(
+            "SELECT COALESCE(SUM(cantidad), 0) FROM tbl_pallet_producto WHERE id_pallet = %s",
+            (id_pallet,)
+        )
         # Revisar si el pallet quedo vacio
         cursor.execute(
             "SELECT COALESCE(SUM(cantidad), 0) FROM tbl_pallet_producto WHERE id_pallet = %s",
@@ -1943,16 +1993,6 @@ def despachar_pallet(id_pallet):
                     (pallet.id_ubicacion,)
                 )
 
-        cursor.execute(
-            """
-            INSERT INTO tbl_movimientos
-                (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente)
-            VALUES (%s, 'Picking', %s, 'Piso', NULL)
-            """,
-            (id_pallet,
-             f"Se retiraron {cantidad_solicitada - restante} cajas del pallet. Llevadas a piso.")
-        )
-
         conn.commit()
         conn.close()
 
@@ -1960,9 +2000,9 @@ def despachar_pallet(id_pallet):
             "picking_resultado.html",
             movimientos=movimientos,
             faltante=restante,
-            destino_tipo="Zona de piso",
+            destino_tipo=destino_tipo,
             cliente_nombre=None,
-            tipo_accion="picking"
+            tipo_accion="despacho" if destino_tipo != "Piso" else "picking"
         )
 
 
