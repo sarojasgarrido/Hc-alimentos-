@@ -705,7 +705,7 @@ def nuevo_pallet():
             )
 
         cursor.execute(
-            "INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion, vigente) VALUES (?, %s, 1)",
+            "INSERT INTO tbl_pallet_ubicacion (id_pallet, id_ubicacion, vigente) VALUES (%s, %s, TRUE)",
             (id_pallet, id_ubicacion)
         )
 
@@ -717,7 +717,7 @@ def nuevo_pallet():
         cursor.execute(
             """
             INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (?, 'Ingreso', %s)
+            VALUES (%s, 'Ingreso', %s)
             """,
             (id_pallet, f"Asignado a {rack}-{nivel}-{posicion}")
         )
@@ -1099,7 +1099,7 @@ def picking():
                     """
                     INSERT INTO tbl_movimientos
                         (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (?, 'Picking', %s, 'Piso')
+                    VALUES (%s, 'Picking', %s, 'Piso')
                     """,
                     (c.id_pallet,
                      f"Se retiraron {tomado} cajas del rack {c.rack}-{c.nivel}-Pos {c.posicion}. "
@@ -1195,7 +1195,7 @@ def picking():
                     """
                     INSERT INTO tbl_movimientos
                         (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (?, 'Despacho', %s, %s)
+                    VALUES (%s, 'Despacho', %s, %s)
                     """,
                     (stock.id_pallet_origen,
                      f"Se despacharon {tomado} cajas desde piso P-N1-Pos {stock.posicion}. "
@@ -1328,7 +1328,7 @@ def editar_pallet(id_pallet):
         cursor.execute(
             """
             INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (?, 'Edicion', %s)
+            VALUES (%s, 'Edicion', %s)
             """,
             (id_pallet, f"Editado por {session.get('nombre')}")
         )
@@ -1789,7 +1789,7 @@ def despachar_pallet(id_pallet):
             """
             INSERT INTO tbl_movimientos
                 (id_pallet, tipo_movimiento, observacion, destino_tipo)
-            VALUES (?, 'Despacho', %s, %s)
+            VALUES (%s, 'Despacho', %s, %s)
             """,
             (id_pallet,
              f"Pallet completo despachado ({total_en_pallet} cajas). Destino: {destino_texto}.",
@@ -1947,7 +1947,7 @@ def despachar_pallet(id_pallet):
             """
             INSERT INTO tbl_movimientos
                 (id_pallet, tipo_movimiento, observacion, destino_tipo, id_cliente)
-            VALUES (?, 'Picking', %s, 'Piso', NULL)
+            VALUES (%s, 'Picking', %s, 'Piso', NULL)
             """,
             (id_pallet,
              f"Se retiraron {cantidad_solicitada - restante} cajas del pallet. Llevadas a piso.")
@@ -1968,5 +1968,3 @@ def despachar_pallet(id_pallet):
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
-
-
