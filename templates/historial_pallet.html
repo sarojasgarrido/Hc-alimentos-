@@ -1,4 +1,4 @@
-{% extends "base.hlml" %}
+{% extends "base.html" %}
 {% block titulo %}Trazabilidad del pallet{% endblock %}
 {% block contenido %}
     <h2>Trazabilidad del pallet N {{ id_pallet }}</h2>
@@ -6,16 +6,18 @@
 
     <h3>Linea de tiempo de movimientos</h3>
     {% if movimientos %}
+    <div class="scroll-box">
     <table>
         <tr>
             <th>Fecha</th>
             <th>Tipo</th>
+            <th>Usuario</th>
             <th>Detalle</th>
             <th>Destino</th>
         </tr>
         {% for m in movimientos %}
         <tr>
-            <td>{{ m.fecha }}</td>
+            <td>{{ m.fecha|fecha_chile }}</td>
             <td>
                 {% if m.tipo_movimiento == 'Ingreso' %}
                     <span class="badge badge-activo">Ingreso</span>
@@ -27,6 +29,7 @@
                     <span class="badge badge-consumido">{{ m.tipo_movimiento }}</span>
                 {% endif %}
             </td>
+            <td>{{ m.usuario or "-" }}</td>
             <td>{{ m.observacion or "-" }}</td>
             <td>
                 {% if m.destino_tipo == 'PlantaPrincipal' %}
@@ -50,12 +53,14 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     {% else %}
     <p>Sin movimientos registrados aun.</p>
     {% endif %}
 
     <h3 style="margin-top:24px;">Historial de ubicaciones</h3>
     {% if ubicaciones %}
+    <div class="scroll-box">
     <table>
         <tr>
             <th>Fecha asignacion</th>
@@ -64,7 +69,7 @@
         </tr>
         {% for u in ubicaciones %}
         <tr>
-            <td>{{ u.fecha_asignacion }}</td>
+            <td>{{ u.fecha_asignacion|fecha_chile }}</td>
             <td>{{ u.rack }}-{{ u.nivel }}-Pos {{ u.posicion }}</td>
             <td>
                 {% if u.vigente %}
@@ -76,6 +81,7 @@
         </tr>
         {% endfor %}
     </table>
+    </div>
     {% endif %}
 
     <br>
