@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_file
 from werkzeug.security import check_password_hash
 from db import get_connection
 import os
@@ -7,6 +7,7 @@ import base64
 import uuid
 import json
 import qrcode
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 from functools import wraps
 
@@ -14,6 +15,33 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave-temporal-cambiar-despues")
+
+# Zona horaria de Chile (UTC-3 en horario de verano, UTC-4 en invierno).
+# Chile continental usa UTC-3 gran parte del año; se define fija por simplicidad.
+ZONA_CHILE = timezone(timedelta(hours=-4))
+
+
+@app.template_filter("fecha_chile")
+def fecha_chile(valor):
+    """
+    Filtro Jinja: formatea una fecha/hora al formato chileno DD-MM-YYYY HH:MM.
+    Convierte a la zona horaria de Chile si el valor tiene informacion de zona.
+    """
+    if valor is None:
+        return "-"
+    if isinstance(valor, str):
+        return valor
+    try:
+        # Si es datetime con zona, convertir a Chile
+        if hasattr(valor, "tzinfo") and valor.tzinfo is not None:
+            valor = valor.astimezone(ZONA_CHILE)
+        return valor.strftime("%d-%m-%Y %H:%M")
+    except Exception:
+        # Si es solo fecha (date) sin hora
+        try:
+            return valor.strftime("%d-%m-%Y")
+        except Exception:
+            return str(valor)
 
 
 def login_requerido(funcion):
@@ -269,9 +297,11 @@ def dashboard():
             "color": color, "color_texto": color_texto
         })
 
-    # Control de inventario: entradas y salidas con filtro de fechas
+    # Control de inventario: entradas y salidas con filtros
     fecha_desde = request.args.get("fecha_desde", "")
     fecha_hasta = request.args.get("fecha_hasta", "")
+    filtro_proveedor = request.args.get("proveedor", "")
+    filtro_producto = request.args.get("producto", "")
 
     filtro_fecha = ""
     params_fecha = []
@@ -281,7 +311,6 @@ def dashboard():
         filtro_fecha += " AND m.fecha < %s::DATE + INTERVAL '1 day'"
         params_fecha.append(fecha_hasta)
     elif fecha_desde:
-        # Solo fecha desde: filtrar solo ese dia
         filtro_fecha += " AND m.fecha >= %s::DATE AND m.fecha < %s::DATE + INTERVAL '1 day'"
         params_fecha.append(fecha_desde)
         params_fecha.append(fecha_desde)
@@ -289,51 +318,71 @@ def dashboard():
         filtro_fecha += " AND m.fecha < %s::DATE + INTERVAL '1 day'"
         params_fecha.append(fecha_hasta)
 
+    # Filtro por proveedor (aplica al pallet)
+    filtro_prov_sql = ""
+    if filtro_proveedor:
+        filtro_prov_sql = " AND pa.id_proveedor = %s"
+
+    # Filtro por producto (aplica a los productos del pallet)
+    filtro_prod_sql = ""
+    if filtro_producto:
+        filtro_prod_sql = " AND EXISTS (SELECT 1 FROM tbl_pallet_producto pp WHERE pp.id_pallet = m.id_pallet AND pp.id_producto = %s)"
+
     conn2 = get_connection()
     cur2 = conn2.cursor()
 
     # Entradas (ingresos de pallets)
+    params_ent = list(params_fecha)
+    if filtro_proveedor:
+        params_ent.append(filtro_proveedor)
+    if filtro_producto:
+        params_ent.append(filtro_producto)
     cur2.execute(
         f"""
-        SELECT m.fecha, m.id_pallet, m.observacion, e.nombre AS proveedor
+        SELECT m.fecha, m.id_pallet, m.observacion, e.nombre AS proveedor, m.usuario
         FROM tbl_movimientos m
         JOIN tbl_pallets pa ON pa.id_pallet = m.id_pallet
         JOIN tbl_empresas e ON e.id_empresa = pa.id_proveedor
-        WHERE m.tipo_movimiento = 'Ingreso' {filtro_fecha}
+        WHERE m.tipo_movimiento = 'Ingreso' {filtro_fecha}{filtro_prov_sql}{filtro_prod_sql}
         ORDER BY m.fecha DESC
         """,
-        tuple(params_fecha)
+        tuple(params_ent)
     )
     entradas = cur2.fetchall()
 
-    # Salidas (despachos desde piso)
+    # Salidas (despachos)
+    params_sal = list(params_fecha)
+    if filtro_proveedor:
+        params_sal.append(filtro_proveedor)
+    if filtro_producto:
+        params_sal.append(filtro_producto)
     cur2.execute(
         f"""
-        SELECT m.fecha, m.id_pallet, m.observacion, m.destino_tipo,
+        SELECT m.fecha, m.id_pallet, m.observacion, m.destino_tipo, m.usuario,
                e.nombre AS cliente_nombre
         FROM tbl_movimientos m
+        JOIN tbl_pallets pa ON pa.id_pallet = m.id_pallet
         LEFT JOIN tbl_empresas e ON e.id_empresa = m.id_cliente
-        WHERE m.tipo_movimiento = 'Despacho' {filtro_fecha}
+        WHERE m.tipo_movimiento = 'Despacho' {filtro_fecha}{filtro_prov_sql}{filtro_prod_sql}
         ORDER BY m.fecha DESC
         """,
-        tuple(params_fecha)
+        tuple(params_sal)
     )
     salidas = cur2.fetchall()
 
-    # Conteos
-    cur2.execute(
-        f"SELECT COUNT(*) FROM tbl_movimientos m WHERE m.tipo_movimiento = 'Ingreso' {filtro_fecha}",
-        tuple(params_fecha)
-    )
-    total_entradas = cur2.fetchone()[0]
-
-    cur2.execute(
-        f"SELECT COUNT(*) FROM tbl_movimientos m WHERE m.tipo_movimiento = 'Despacho' {filtro_fecha}",
-        tuple(params_fecha)
-    )
-    total_salidas = cur2.fetchone()[0]
+    total_entradas = len(entradas)
+    total_salidas = len(salidas)
 
     conn2.close()
+
+    # Listas para los filtros desplegables
+    conn4 = get_connection()
+    cur4 = conn4.cursor()
+    cur4.execute("SELECT id_empresa, nombre FROM tbl_empresas WHERE es_proveedor = TRUE ORDER BY nombre")
+    lista_proveedores = cur4.fetchall()
+    cur4.execute("SELECT id_producto, nombre FROM tbl_productos WHERE activo = TRUE ORDER BY nombre")
+    lista_productos = cur4.fetchall()
+    conn4.close()
 
     # Indicador de rotacion: clasificar productos por frecuencia de despacho
     conn3 = get_connection()
@@ -425,6 +474,10 @@ def dashboard():
         total_salidas=total_salidas,
         fecha_desde=fecha_desde,
         fecha_hasta=fecha_hasta,
+        filtro_proveedor=filtro_proveedor,
+        filtro_producto=filtro_producto,
+        lista_proveedores=lista_proveedores,
+        lista_productos=lista_productos,
         rotacion_lista=rotacion_lista,
         pct_rot=pct_rot
     )
@@ -716,10 +769,10 @@ def nuevo_pallet():
 
         cursor.execute(
             """
-            INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (%s, 'Ingreso', %s)
+            INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion, usuario)
+            VALUES (%s, 'Ingreso', %s, %s)
             """,
-            (id_pallet, f"Asignado a {rack}-{nivel}-{posicion}")
+            (id_pallet, f"Asignado a {rack}-{nivel}-{posicion}", session.get("nombre"))
         )
 
         conn.commit()
@@ -1098,12 +1151,13 @@ def picking():
                 cursor.execute(
                     """
                     INSERT INTO tbl_movimientos
-                        (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (%s, 'Picking', %s, 'Piso')
+                        (id_pallet, tipo_movimiento, observacion, destino_tipo, usuario)
+                    VALUES (%s, 'Picking', %s, 'Piso', %s)
                     """,
                     (c.id_pallet,
                      f"Se retiraron {tomado} cajas del rack {c.rack}-{c.nivel}-Pos {c.posicion}. "
-                     f"Quedan {nueva_cantidad} en el pallet. Llevadas a piso: {destino_str}.")
+                     f"Quedan {nueva_cantidad} en el pallet. Llevadas a piso: {destino_str}.",
+                     session.get("nombre"))
                 )
 
                 movimientos.append({
@@ -1194,13 +1248,13 @@ def picking():
                 cursor.execute(
                     """
                     INSERT INTO tbl_movimientos
-                        (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                    VALUES (%s, 'Despacho', %s, %s)
+                        (id_pallet, tipo_movimiento, observacion, destino_tipo, usuario)
+                    VALUES (%s, 'Despacho', %s, %s, %s)
                     """,
                     (stock.id_pallet_origen,
                      f"Se despacharon {tomado} cajas desde piso P-N1-Pos {stock.posicion}. "
                      f"Quedan {nueva_cantidad} en piso. Destino: {destino_texto}.",
-                     destino_tipo)
+                     destino_tipo, session.get("nombre"))
                 )
 
             conn.commit()
@@ -1327,10 +1381,10 @@ def editar_pallet(id_pallet):
         # Registrar la edicion en movimientos
         cursor.execute(
             """
-            INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion)
-            VALUES (%s, 'Edicion', %s)
+            INSERT INTO tbl_movimientos (id_pallet, tipo_movimiento, observacion, usuario)
+            VALUES (%s, 'Edicion', %s, %s)
             """,
-            (id_pallet, f"Editado por {session.get('nombre')}")
+            (id_pallet, f"Editado por {session.get('nombre')}", session.get("nombre"))
         )
 
         conn.commit()
@@ -1639,7 +1693,7 @@ def historial_pallet(id_pallet):
 
     cursor.execute(
         """
-        SELECT m.fecha, m.tipo_movimiento, m.observacion, m.destino_tipo,
+        SELECT m.fecha, m.tipo_movimiento, m.observacion, m.destino_tipo, m.usuario,
                e.nombre AS cliente_nombre
         FROM tbl_movimientos m
         LEFT JOIN tbl_empresas e ON e.id_empresa = m.id_cliente
@@ -1789,12 +1843,12 @@ def despachar_pallet(id_pallet):
         cursor.execute(
             """
             INSERT INTO tbl_movimientos
-                (id_pallet, tipo_movimiento, observacion, destino_tipo)
-            VALUES (%s, 'Despacho', %s, %s)
+                (id_pallet, tipo_movimiento, observacion, destino_tipo, usuario)
+            VALUES (%s, 'Despacho', %s, %s, %s)
             """,
             (id_pallet,
              f"Pallet completo despachado ({total_en_pallet} cajas). Destino: {destino_texto}.",
-             destino_tipo)
+             destino_tipo, session.get("nombre"))
         )
 
         conn.commit()
@@ -1927,11 +1981,12 @@ def despachar_pallet(id_pallet):
             cursor.execute(
                 """
                 INSERT INTO tbl_movimientos
-                    (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                VALUES (%s, 'Picking', %s, 'Piso')
+                    (id_pallet, tipo_movimiento, observacion, destino_tipo, usuario)
+                VALUES (%s, 'Picking', %s, 'Piso', %s)
                 """,
                 (id_pallet,
-                 f"Se movieron {cantidad_solicitada - restante} cajas del pallet a la zona de picking.")
+                 f"Se movieron {cantidad_solicitada - restante} cajas del pallet a la zona de picking.",
+                 session.get("nombre"))
             )
 
         else:
@@ -1960,12 +2015,12 @@ def despachar_pallet(id_pallet):
             cursor.execute(
                 """
                 INSERT INTO tbl_movimientos
-                    (id_pallet, tipo_movimiento, observacion, destino_tipo)
-                VALUES (%s, 'Despacho', %s, %s)
+                    (id_pallet, tipo_movimiento, observacion, destino_tipo, usuario)
+                VALUES (%s, 'Despacho', %s, %s, %s)
                 """,
                 (id_pallet,
                  f"Se despacharon {cantidad_solicitada - restante} cajas del pallet. Destino: {destino_texto}.",
-                 destino_tipo)
+                 destino_tipo, session.get("nombre"))
             )
 
         # Revisar si el pallet quedo vacio
@@ -2005,6 +2060,147 @@ def despachar_pallet(id_pallet):
             cliente_nombre=None,
             tipo_accion="despacho" if destino_tipo != "Piso" else "picking"
         )
+
+
+@app.route("/exportar/excel")
+@login_requerido
+def exportar_excel():
+    """
+    Genera un Excel con dos hojas: Movimientos (con filtros aplicados)
+    e Inventario actual. Respeta los filtros de fecha, proveedor y producto.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    fecha_desde = request.args.get("fecha_desde", "")
+    fecha_hasta = request.args.get("fecha_hasta", "")
+    filtro_proveedor = request.args.get("proveedor", "")
+    filtro_producto = request.args.get("producto", "")
+
+    filtro_fecha = ""
+    params_fecha = []
+    if fecha_desde and fecha_hasta:
+        filtro_fecha += " AND m.fecha >= %s::DATE AND m.fecha < %s::DATE + INTERVAL '1 day'"
+        params_fecha.extend([fecha_desde, fecha_hasta])
+    elif fecha_desde:
+        filtro_fecha += " AND m.fecha >= %s::DATE AND m.fecha < %s::DATE + INTERVAL '1 day'"
+        params_fecha.extend([fecha_desde, fecha_desde])
+    elif fecha_hasta:
+        filtro_fecha += " AND m.fecha < %s::DATE + INTERVAL '1 day'"
+        params_fecha.append(fecha_hasta)
+
+    filtro_prov_sql = " AND pa.id_proveedor = %s" if filtro_proveedor else ""
+    filtro_prod_sql = (" AND EXISTS (SELECT 1 FROM tbl_pallet_producto pp WHERE pp.id_pallet = m.id_pallet AND pp.id_producto = %s)"
+                       if filtro_producto else "")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # --- Hoja 1: Movimientos ---
+    params_mov = list(params_fecha)
+    if filtro_proveedor:
+        params_mov.append(filtro_proveedor)
+    if filtro_producto:
+        params_mov.append(filtro_producto)
+
+    cursor.execute(
+        f"""
+        SELECT m.fecha, m.id_pallet, m.tipo_movimiento, m.observacion,
+               m.destino_tipo, m.usuario, e.nombre AS proveedor
+        FROM tbl_movimientos m
+        JOIN tbl_pallets pa ON pa.id_pallet = m.id_pallet
+        JOIN tbl_empresas e ON e.id_empresa = pa.id_proveedor
+        WHERE 1=1 {filtro_fecha}{filtro_prov_sql}{filtro_prod_sql}
+        ORDER BY m.fecha DESC
+        """,
+        tuple(params_mov)
+    )
+    movimientos = cursor.fetchall()
+
+    # --- Hoja 2: Inventario actual ---
+    inv_params = []
+    inv_filtro = ""
+    if filtro_proveedor:
+        inv_filtro += " AND pa.id_proveedor = %s"
+        inv_params.append(filtro_proveedor)
+    if filtro_producto:
+        inv_filtro += " AND pp.id_producto = %s"
+        inv_params.append(filtro_producto)
+
+    cursor.execute(
+        f"""
+        SELECT pa.id_pallet, e.nombre AS proveedor, pr.nombre AS producto,
+               pp.cantidad, pp.cantidad_original, pp.fecha_vencimiento,
+               u.rack, u.nivel, u.posicion, pa.estado, pa.factura
+        FROM tbl_pallets pa
+        JOIN tbl_empresas e ON e.id_empresa = pa.id_proveedor
+        JOIN tbl_pallet_producto pp ON pp.id_pallet = pa.id_pallet
+        JOIN tbl_productos pr ON pr.id_producto = pp.id_producto
+        LEFT JOIN tbl_pallet_ubicacion puu ON puu.id_pallet = pa.id_pallet AND puu.vigente = TRUE
+        LEFT JOIN tbl_ubicaciones u ON u.id_ubicacion = puu.id_ubicacion
+        WHERE pa.estado != 'Consumido' AND pp.cantidad > 0 {inv_filtro}
+        ORDER BY pa.id_pallet
+        """,
+        tuple(inv_params)
+    )
+    inventario = cursor.fetchall()
+    conn.close()
+
+    # Construir el Excel
+    wb = openpyxl.Workbook()
+
+    encabezado_fill = PatternFill(start_color="C8311F", end_color="C8311F", fill_type="solid")
+    encabezado_font = Font(color="FFFFFF", bold=True)
+
+    # Hoja Movimientos
+    ws1 = wb.active
+    ws1.title = "Movimientos"
+    cols1 = ["Fecha", "Pallet", "Tipo", "Detalle", "Destino", "Usuario", "Proveedor"]
+    ws1.append(cols1)
+    for celda in ws1[1]:
+        celda.fill = encabezado_fill
+        celda.font = encabezado_font
+    for m in movimientos:
+        fecha_str = m.fecha.astimezone(ZONA_CHILE).strftime("%d-%m-%Y %H:%M") if m.fecha and hasattr(m.fecha, "astimezone") and m.fecha.tzinfo else (m.fecha.strftime("%d-%m-%Y %H:%M") if m.fecha else "-")
+        ws1.append([
+            fecha_str, m.id_pallet, m.tipo_movimiento, m.observacion or "",
+            m.destino_tipo or "", m.usuario or "", m.proveedor
+        ])
+    for col in ws1.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col)
+        ws1.column_dimensions[col[0].column_letter].width = min(max_len + 2, 50)
+
+    # Hoja Inventario
+    ws2 = wb.create_sheet("Inventario actual")
+    cols2 = ["Pallet", "Proveedor", "Producto", "Cantidad", "Cant. original",
+             "Vencimiento", "Ubicacion", "Estado", "Factura"]
+    ws2.append(cols2)
+    for celda in ws2[1]:
+        celda.fill = encabezado_fill
+        celda.font = encabezado_font
+    for it in inventario:
+        ubicacion = f"{it.rack}-{it.nivel}-{it.posicion}" if it.rack else "Sin ubicacion"
+        venc = it.fecha_vencimiento.strftime("%d-%m-%Y") if it.fecha_vencimiento else "-"
+        ws2.append([
+            it.id_pallet, it.proveedor, it.producto, it.cantidad,
+            it.cantidad_original, venc, ubicacion, it.estado, it.factura or ""
+        ])
+    for col in ws2.columns:
+        max_len = max((len(str(c.value)) if c.value else 0) for c in col)
+        ws2.column_dimensions[col[0].column_letter].width = min(max_len + 2, 50)
+
+    # Guardar en memoria y enviar
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    fecha_archivo = datetime.now(ZONA_CHILE).strftime("%Y%m%d_%H%M")
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=f"inventario_hc_alimentos_{fecha_archivo}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 if __name__ == "__main__":
