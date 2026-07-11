@@ -26,18 +26,51 @@
         </a>
     </div>
 
-    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:8px; padding:10px 16px; margin-bottom:18px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <form method="GET" action="{{ url_for('dashboard') }}" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%;">
-            <span style="font-size:13px; color:#5C564E;">Filtrar por fecha:</span>
-            <input type="date" name="fecha_desde" value="{{ fecha_desde }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
-            <span style="font-size:13px;">a</span>
-            <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
-            <button type="submit" style="padding:5px 14px; font-size:12px;">Filtrar</button>
-            {% if fecha_desde or fecha_hasta %}
+    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:8px; padding:12px 16px; margin-bottom:18px;">
+        <form method="GET" action="{{ url_for('dashboard') }}" id="form-filtros" style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
+            <div>
+                <label style="font-size:11px; color:#5C564E; display:block;">Desde</label>
+                <input type="date" name="fecha_desde" value="{{ fecha_desde }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
+            </div>
+            <div>
+                <label style="font-size:11px; color:#5C564E; display:block;">Hasta</label>
+                <input type="date" name="fecha_hasta" value="{{ fecha_hasta }}" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
+            </div>
+            <div>
+                <label style="font-size:11px; color:#5C564E; display:block;">Proveedor</label>
+                <select name="proveedor" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
+                    <option value="">Todos</option>
+                    {% for pv in lista_proveedores %}
+                    <option value="{{ pv.id_empresa }}" {% if filtro_proveedor == pv.id_empresa|string %}selected{% endif %}>{{ pv.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px; color:#5C564E; display:block;">Producto</label>
+                <select name="producto" style="padding:5px 8px; border:1px solid var(--gris-borde); border-radius:4px; font-size:12px;">
+                    <option value="">Todos</option>
+                    {% for pr in lista_productos %}
+                    <option value="{{ pr.id_producto }}" {% if filtro_producto == pr.id_producto|string %}selected{% endif %}>{{ pr.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" style="padding:6px 14px; font-size:12px;">Filtrar</button>
+            {% if fecha_desde or fecha_hasta or filtro_proveedor or filtro_producto %}
             <a href="{{ url_for('dashboard') }}" style="font-size:12px;">Limpiar</a>
             {% endif %}
+            <a href="#" onclick="descargarExcel(); return false;" style="margin-left:auto; background-color:#1D6F42; color:white; padding:6px 14px; border-radius:6px; text-decoration:none; font-weight:600; font-size:12px;">
+                Descargar Excel
+            </a>
         </form>
     </div>
+
+    <script>
+    function descargarExcel() {
+        const form = document.getElementById('form-filtros');
+        const params = new URLSearchParams(new FormData(form)).toString();
+        window.location.href = "{{ url_for('exportar_excel') }}?" + params;
+    }
+    </script>
 
     <h3>Plano de la bodega</h3>
     <p style="color:#5C564E; font-size:13px; margin-top:-8px;">Haz clic en cualquier rack o posicion para ver el detalle. Capacidad: {{ capacidad_pallet }} cajas/pallet.</p>
@@ -163,9 +196,9 @@
             {% if entradas %}
             <div class="scroll-box">
             <table>
-                <tr><th>Fecha</th><th>Pallet</th><th>Proveedor</th><th>Detalle</th></tr>
+                <tr><th>Fecha</th><th>Pallet</th><th>Proveedor</th><th>Usuario</th><th>Detalle</th></tr>
                 {% for e in entradas %}
-                <tr><td style="font-size:11px;">{{ e.fecha }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=e.id_pallet) }}">{{ e.id_pallet }}</a></td><td>{{ e.proveedor }}</td><td style="font-size:11px;">{{ e.observacion or "-" }}</td></tr>
+                <tr><td style="font-size:11px;">{{ e.fecha|fecha_chile }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=e.id_pallet) }}">{{ e.id_pallet }}</a></td><td>{{ e.proveedor }}</td><td style="font-size:11px;">{{ e.usuario or "-" }}</td><td style="font-size:11px;">{{ e.observacion or "-" }}</td></tr>
                 {% endfor %}
             </table>
             </div>
@@ -176,10 +209,11 @@
             {% if salidas %}
             <div class="scroll-box">
             <table>
-                <tr><th>Fecha</th><th>Pallet</th><th>Destino</th><th>Detalle</th></tr>
+                <tr><th>Fecha</th><th>Pallet</th><th>Destino</th><th>Usuario</th><th>Detalle</th></tr>
                 {% for s in salidas %}
-                <tr><td style="font-size:11px;">{{ s.fecha }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=s.id_pallet) }}">{{ s.id_pallet }}</a></td>
+                <tr><td style="font-size:11px;">{{ s.fecha|fecha_chile }}</td><td><a href="{{ url_for('ver_pallet', id_pallet=s.id_pallet) }}">{{ s.id_pallet }}</a></td>
                 <td>{% if s.destino_tipo == 'Produccion1' %}Sala prod. 1{% elif s.destino_tipo == 'Produccion2' %}Sala prod. 2{% elif s.destino_tipo == 'PlantaPrincipal' %}Planta principal{% else %}{{ s.destino_tipo or "-" }}{% endif %}</td>
+                <td style="font-size:11px;">{{ s.usuario or "-" }}</td>
                 <td style="font-size:11px;">{{ s.observacion or "-" }}</td></tr>
                 {% endfor %}
             </table>
