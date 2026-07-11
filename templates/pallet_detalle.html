@@ -7,7 +7,7 @@
         <p><strong>Pallet N°:</strong> {{ pallet.id_pallet }}</p>
         <p><strong>Proveedor:</strong> {{ pallet.proveedor }}</p>
         <p><strong>Factura:</strong> {{ pallet.factura or "-" }}</p>
-        <p><strong>Fecha de ingreso:</strong> {{ pallet.fecha_ingreso }}</p>
+        <p><strong>Fecha de ingreso:</strong> {{ pallet.fecha_ingreso|fecha_chile }}</p>
         <p><strong>Estado:</strong>
             {% if pallet.estado == 'Activo' %}
                 <span class="badge badge-activo">Activo</span>
@@ -90,4 +90,3 @@
     </p>
     <p><a href="{{ url_for('consulta_pallet') }}">Buscar otro pallet</a></p>
 {% endblock %}
-
