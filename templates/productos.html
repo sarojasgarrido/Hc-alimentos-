@@ -6,6 +6,9 @@
     {% if mensaje %}
         <p class="mensaje">{{ mensaje }}</p>
     {% endif %}
+    {% if error %}
+        <p style="background-color:#FBE9E5; color:#8C2E1F; padding:11px 14px; border-radius:8px; margin-bottom:15px; font-size:14px;">{{ error }}</p>
+    {% endif %}
 
     <div class="form-box">
         <h3>Agregar producto</h3>
