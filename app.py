@@ -494,18 +494,31 @@ def productos():
     cursor = conn.cursor()
 
     mensaje = None
+    error = None
 
     if request.method == "POST":
         codigo = request.form.get("codigo") or None
         nombre = request.form["nombre"]
         unidad = request.form.get("unidad") or None
 
-        cursor.execute(
-            "INSERT INTO tbl_productos (codigo, nombre, unidad) VALUES (%s, %s, %s)",
-            (codigo, nombre, unidad)
-        )
-        conn.commit()
-        mensaje = f"Producto '{nombre}' agregado correctamente."
+        # Validar duplicados por codigo o nombre
+        if codigo:
+            cursor.execute("SELECT id_producto FROM tbl_productos WHERE codigo = %s", (codigo,))
+            if cursor.fetchone():
+                error = f"Ya existe un producto con el codigo '{codigo}'."
+
+        if not error:
+            cursor.execute("SELECT id_producto FROM tbl_productos WHERE LOWER(nombre) = LOWER(%s)", (nombre,))
+            if cursor.fetchone():
+                error = f"Ya existe un producto con el nombre '{nombre}'."
+
+        if not error:
+            cursor.execute(
+                "INSERT INTO tbl_productos (codigo, nombre, unidad) VALUES (%s, %s, %s)",
+                (codigo, nombre, unidad)
+            )
+            conn.commit()
+            mensaje = f"Producto '{nombre}' agregado correctamente."
 
     cursor.execute(
         "SELECT id_producto, codigo, nombre, unidad, activo FROM tbl_productos ORDER BY nombre"
@@ -513,7 +526,7 @@ def productos():
     lista_productos = cursor.fetchall()
     conn.close()
 
-    return render_template("productos.html", productos=lista_productos, mensaje=mensaje)
+    return render_template("productos.html", productos=lista_productos, mensaje=mensaje, error=error)
 
 
 @app.route("/productos/editar/<int:id_producto>", methods=["GET", "POST"])
@@ -527,6 +540,33 @@ def editar_producto(id_producto):
         nombre = request.form["nombre"]
         unidad = request.form.get("unidad") or None
         activo = True if request.form.get("activo") else False
+
+        # Validar duplicados excluyendo el propio registro
+        error = None
+        if codigo:
+            cursor.execute(
+                "SELECT id_producto FROM tbl_productos WHERE codigo = %s AND id_producto != %s",
+                (codigo, id_producto)
+            )
+            if cursor.fetchone():
+                error = f"Ya existe otro producto con el codigo '{codigo}'."
+
+        if not error:
+            cursor.execute(
+                "SELECT id_producto FROM tbl_productos WHERE LOWER(nombre) = LOWER(%s) AND id_producto != %s",
+                (nombre, id_producto)
+            )
+            if cursor.fetchone():
+                error = f"Ya existe otro producto con el nombre '{nombre}'."
+
+        if error:
+            cursor.execute(
+                "SELECT id_producto, codigo, nombre, unidad, activo FROM tbl_productos WHERE id_producto = %s",
+                (id_producto,)
+            )
+            producto = cursor.fetchone()
+            conn.close()
+            return render_template("producto_editar.html", producto=producto, error=error)
 
         cursor.execute(
             """
@@ -572,6 +612,7 @@ def empresas():
     cursor = conn.cursor()
 
     mensaje = None
+    error = None
 
     if request.method == "POST":
         nombre = request.form["nombre"]
@@ -582,16 +623,23 @@ def empresas():
         es_proveedor = True if request.form.get("es_proveedor") else False
         es_cliente = True if request.form.get("es_cliente") else False
 
-        cursor.execute(
-            """
-            INSERT INTO tbl_empresas
+        # Validar duplicado por RUT
+        if rut:
+            cursor.execute("SELECT id_empresa FROM tbl_empresas WHERE rut = %s", (rut,))
+            if cursor.fetchone():
+                error = f"Ya existe una empresa registrada con el RUT '{rut}'."
+
+        if not error:
+            cursor.execute(
+                """
+                INSERT INTO tbl_empresas
+                    (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                """,
                 (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (nombre, rut, telefono, correo, direccion, es_proveedor, es_cliente)
-        )
-        conn.commit()
-        mensaje = f"Empresa '{nombre}' agregada correctamente."
+            )
+            conn.commit()
+            mensaje = f"Empresa '{nombre}' agregada correctamente."
 
     cursor.execute(
         """
@@ -603,7 +651,7 @@ def empresas():
     lista_empresas = cursor.fetchall()
     conn.close()
 
-    return render_template("empresas.html", empresas=lista_empresas, mensaje=mensaje)
+    return render_template("empresas.html", empresas=lista_empresas, mensaje=mensaje, error=error)
 
 
 @app.route("/empresas/editar/<int:id_empresa>", methods=["GET", "POST"])
@@ -621,6 +669,29 @@ def editar_empresa(id_empresa):
         es_proveedor = True if request.form.get("es_proveedor") else False
         es_cliente = True if request.form.get("es_cliente") else False
         activo = True if request.form.get("activo") else False
+
+        # Validar duplicado RUT excluyendo la propia empresa
+        error = None
+        if rut:
+            cursor.execute(
+                "SELECT id_empresa FROM tbl_empresas WHERE rut = %s AND id_empresa != %s",
+                (rut, id_empresa)
+            )
+            if cursor.fetchone():
+                error = f"Ya existe otra empresa con el RUT '{rut}'."
+
+        if error:
+            cursor.execute(
+                """
+                SELECT id_empresa, nombre, rut, telefono, correo, direccion,
+                       es_proveedor, es_cliente, activo
+                FROM tbl_empresas WHERE id_empresa = %s
+                """,
+                (id_empresa,)
+            )
+            empresa = cursor.fetchone()
+            conn.close()
+            return render_template("empresa_editar.html", empresa=empresa, error=error)
 
         cursor.execute(
             """
