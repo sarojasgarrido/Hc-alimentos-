@@ -24,7 +24,7 @@
                     {% elif r.estado == 'Picking' %}<span class="badge badge-picking">Picking</span>
                     {% else %}<span class="badge badge-consumido">{{ r.estado }}</span>{% endif %}
                 </td>
-                <td>{{ r.fecha_ingreso }}</td>
+                <td>{{ r.fecha_ingreso|fecha_chile }}</td>
                 <td><a href="{{ url_for('ver_pallet', id_pallet=r.id_pallet) }}">Ver detalle</a></td>
             </tr>
             {% endfor %}
