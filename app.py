@@ -8,6 +8,7 @@ import uuid
 import json
 import qrcode
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 from functools import wraps
 
@@ -16,28 +17,30 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "clave-temporal-cambiar-despues")
 
-# Zona horaria de Chile (UTC-3 en horario de verano, UTC-4 en invierno).
-# Chile continental usa UTC-3 gran parte del año; se define fija por simplicidad.
-ZONA_CHILE = timezone(timedelta(hours=-4))
+# Zona horaria de Chile continental. ZoneInfo maneja automaticamente
+# el cambio de horario de verano/invierno.
+ZONA_CHILE = ZoneInfo("America/Santiago")
 
 
 @app.template_filter("fecha_chile")
 def fecha_chile(valor):
     """
     Filtro Jinja: formatea una fecha/hora al formato chileno DD-MM-YYYY HH:MM.
-    Convierte a la zona horaria de Chile si el valor tiene informacion de zona.
+    Si el valor es datetime sin zona, se asume que viene de PostgreSQL en UTC.
+    Convierte a la zona horaria de Chile.
     """
     if valor is None:
         return "-"
     if isinstance(valor, str):
         return valor
     try:
-        # Si es datetime con zona, convertir a Chile
-        if hasattr(valor, "tzinfo") and valor.tzinfo is not None:
+        # Si es datetime sin zona (naive), asumir UTC (PostgreSQL guarda asi)
+        if hasattr(valor, "tzinfo"):
+            if valor.tzinfo is None:
+                valor = valor.replace(tzinfo=timezone.utc)
             valor = valor.astimezone(ZONA_CHILE)
         return valor.strftime("%d-%m-%Y %H:%M")
     except Exception:
-        # Si es solo fecha (date) sin hora
         try:
             return valor.strftime("%d-%m-%Y")
         except Exception:
@@ -2232,7 +2235,13 @@ def exportar_excel():
         celda.fill = encabezado_fill
         celda.font = encabezado_font
     for m in movimientos:
-        fecha_str = m.fecha.astimezone(ZONA_CHILE).strftime("%d-%m-%Y %H:%M") if m.fecha and hasattr(m.fecha, "astimezone") and m.fecha.tzinfo else (m.fecha.strftime("%d-%m-%Y %H:%M") if m.fecha else "-")
+        if m.fecha:
+            fecha_dt = m.fecha
+            if hasattr(fecha_dt, "tzinfo") and fecha_dt.tzinfo is None:
+                fecha_dt = fecha_dt.replace(tzinfo=timezone.utc)
+            fecha_str = fecha_dt.astimezone(ZONA_CHILE).strftime("%d-%m-%Y %H:%M")
+        else:
+            fecha_str = "-"
         ws1.append([
             fecha_str, m.id_pallet, m.tipo_movimiento, m.observacion or "",
             m.destino_tipo or "", m.usuario or "", m.proveedor
