@@ -283,6 +283,63 @@
         a {
             color: var(--rojo-marca);
         }
+
+        /* --- Menu con desplegables --- */
+        .menu-grupo {
+            position: relative;
+        }
+        .menu-boton {
+            color: white;
+            background: transparent;
+            border: none;
+            font-family: 'Inter', Arial, sans-serif;
+            font-weight: 500;
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            opacity: 0.92;
+        }
+        .menu-boton:hover {
+            background-color: rgba(255,255,255,0.15);
+            opacity: 1;
+        }
+        .menu-boton .flecha {
+            font-size: 10px;
+            margin-top: 2px;
+        }
+        .menu-panel {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            background: white;
+            color: var(--carbon);
+            border-radius: 8px;
+            box-shadow: 0 4px 18px rgba(45,41,37,0.18);
+            min-width: 210px;
+            padding: 6px;
+            z-index: 100;
+            display: none;
+        }
+        .menu-grupo.abierto .menu-panel {
+            display: block;
+        }
+        .menu-panel a {
+            display: block;
+            padding: 9px 14px;
+            color: var(--carbon);
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 13.5px;
+            font-weight: 500;
+        }
+        .menu-panel a:hover {
+            background-color: #FCEFE2;
+            color: var(--rojo-marca);
+        }
     </style>
 </head>
 <body>
@@ -290,21 +347,55 @@
         <div class="marca">HC <span>Alimentos</span> &middot; Bodega</div>
         <nav>
             <a href="{{ url_for('dashboard') }}">Panel</a>
-            <a href="{{ url_for('nuevo_pallet') }}">Ingresar Pallet</a>
-            <a href="{{ url_for('consulta_pallet') }}">Consultar Pallet</a>
-            <a href="{{ url_for('buscar_pallets') }}">Buscar Pallets</a>
-            <a href="{{ url_for('picking') }}">Picking / Despacho</a>
-            <a href="{{ url_for('productos') }}">Productos</a>
-            <a href="{{ url_for('empresas') }}">Empresas</a>
-            {% if session.get('rol') == 'Administrador' %}
-            <a href="{{ url_for('usuarios') }}">Usuarios</a>
-            {% endif %}
+
+            <div class="menu-grupo" id="menu-operaciones">
+                <button type="button" class="menu-boton" onclick="toggleMenu('menu-operaciones')">
+                    Operaciones <span class="flecha">&#9660;</span>
+                </button>
+                <div class="menu-panel">
+                    <a href="{{ url_for('nuevo_pallet') }}">Ingresar Pallet</a>
+                    <a href="{{ url_for('consulta_pallet') }}">Consultar Pallet</a>
+                    <a href="{{ url_for('buscar_pallets') }}">Buscar Pallets</a>
+                    <a href="{{ url_for('picking') }}">Picking / Despacho</a>
+                </div>
+            </div>
+
+            <div class="menu-grupo" id="menu-configuracion">
+                <button type="button" class="menu-boton" onclick="toggleMenu('menu-configuracion')">
+                    Configuracion <span class="flecha">&#9660;</span>
+                </button>
+                <div class="menu-panel">
+                    <a href="{{ url_for('productos') }}">Productos</a>
+                    <a href="{{ url_for('empresas') }}">Empresas</a>
+                    {% if session.get('rol') == 'Administrador' %}
+                    <a href="{{ url_for('usuarios') }}">Usuarios</a>
+                    {% endif %}
+                </div>
+            </div>
         </nav>
         <div class="usuario-box">
             <span>{{ session.get('nombre') }} &middot; {{ session.get('rol') }}</span>
             <a class="salir" href="{{ url_for('logout') }}">Cerrar sesion</a>
         </div>
     </header>
+
+    <script>
+        function toggleMenu(id) {
+            const grupo = document.getElementById(id);
+            const estabaAbierto = grupo.classList.contains('abierto');
+            // Cerrar todos los menus primero
+            document.querySelectorAll('.menu-grupo').forEach(g => g.classList.remove('abierto'));
+            // Si no estaba abierto, abrirlo
+            if (!estabaAbierto) grupo.classList.add('abierto');
+        }
+        // Cerrar al hacer clic fuera
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.menu-grupo')) {
+                document.querySelectorAll('.menu-grupo').forEach(g => g.classList.remove('abierto'));
+            }
+        });
+    </script>
+
     <main>
         {% block contenido %}{% endblock %}
     </main>
