@@ -2,6 +2,9 @@
 {% block titulo %}Editar producto{% endblock %}
 {% block contenido %}
     <h2>Editar producto</h2>
+    {% if error %}
+        <p style="background-color:#FBE9E5; color:#8C2E1F; padding:11px 14px; border-radius:8px; margin-bottom:15px; font-size:14px; max-width:520px;">{{ error }}</p>
+    {% endif %}
     <div class="form-box">
         <form method="POST">
             <input type="text" name="codigo" value="{{ producto.codigo or '' }}" placeholder="Codigo">
