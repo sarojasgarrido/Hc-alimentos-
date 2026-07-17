@@ -1415,7 +1415,7 @@ def editar_pallet(id_pallet):
         ids_que_quedan = [int(i) for i in ids_pallet_producto if i]
 
         if ids_que_quedan:
-            placeholders = ",".join("?" * len(ids_que_quedan))
+            placeholders = ",".join(["%s"] * len(ids_que_quedan))
             cursor.execute(
                 f"DELETE FROM tbl_pallet_producto WHERE id_pallet = %s AND id_pallet_producto NOT IN ({placeholders})",
                 (id_pallet, *ids_que_quedan)
@@ -1797,6 +1797,32 @@ def historial_pallet(id_pallet):
         movimientos=movimientos,
         ubicaciones=ubicaciones
     )
+
+
+@app.route("/pallets/qr_img/<int:id_pallet>")
+@login_requerido
+def ver_qr_imagen(id_pallet):
+    """Devuelve solo la imagen PNG del QR, para embeber en la pagina de detalle."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT codigo_qr FROM tbl_pallets WHERE id_pallet = %s",
+        (id_pallet,)
+    )
+    fila = cursor.fetchone()
+    conn.close()
+
+    if fila is None:
+        return "Pallet no encontrado.", 404
+
+    url_consulta = request.host_url.rstrip("/") + url_for(
+        "consulta_pallet_detalle", codigo_qr=fila.codigo_qr
+    )
+    img = qrcode.make(url_consulta)
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    return send_file(buffer, mimetype="image/png")
 
 
 @app.route("/pallets/qr/<int:id_pallet>")
