@@ -933,6 +933,7 @@ def obtener_pallet_y_items(cursor, condicion_sql, parametro):
         f"""
         SELECT
             pa.id_pallet, pa.id_proveedor, pa.factura, pa.fecha_ingreso, pa.estado,
+            pa.codigo_qr,
             pv.nombre AS proveedor,
             u.rack, u.nivel, u.posicion
         FROM tbl_pallets pa
