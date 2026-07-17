@@ -1,54 +1,116 @@
 {% extends "base.html" %}
 {% block titulo %}Detalle del pallet{% endblock %}
 {% block contenido %}
-    <h2>Detalle del pallet</h2>
+    <h2>Pallet #{{ pallet.id_pallet }}</h2>
 
-    <div class="form-box" style="max-width:700px;">
-        <p><strong>Pallet N°:</strong> {{ pallet.id_pallet }}</p>
-        <p><strong>Proveedor:</strong> {{ pallet.proveedor }}</p>
-        <p><strong>Factura:</strong> {{ pallet.factura or "-" }}</p>
-        <p><strong>Fecha de ingreso:</strong> {{ pallet.fecha_ingreso|fecha_chile }}</p>
-        <p><strong>Estado:</strong>
-            {% if pallet.estado == 'Activo' %}
-                <span class="badge badge-activo">Activo</span>
-            {% elif pallet.estado == 'Picking' %}
-                <span class="badge badge-picking">Picking</span>
-            {% else %}
-                <span class="badge badge-consumido">{{ pallet.estado }}</span>
-            {% endif %}
-        </p>
-        <p><strong>Ubicacion actual:</strong>
-            {% if pallet.rack %}
-                {{ pallet.rack }} - {{ pallet.nivel }} - Posicion {{ pallet.posicion }}
-            {% else %}
-                Sin ubicacion asignada
-            {% endif %}
-        </p>
+    <!-- FILA SUPERIOR: Info a la izquierda + QR a la derecha -->
+    <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+
+        <!-- Panel izquierdo: informacion del pallet -->
+        <div style="flex:2; min-width:400px; background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:22px; box-shadow:0 1px 4px rgba(45,41,37,0.08);">
+            <h3 style="margin-top:0; font-family:'Poppins',sans-serif; font-size:16px;">Informacion del pallet</h3>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:14px;">
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Proveedor</div>
+                    <div style="font-size:14px; font-weight:600; color:#2D2925; margin-top:2px;">{{ pallet.proveedor }}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Factura</div>
+                    <div style="font-size:14px; font-weight:600; color:#2D2925; margin-top:2px;">{{ pallet.factura or "-" }}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Estado</div>
+                    <div style="margin-top:4px;">
+                        {% if pallet.estado == 'Activo' %}
+                            <span class="badge badge-activo">Activo</span>
+                        {% elif pallet.estado == 'Picking' %}
+                            <span class="badge badge-picking">Picking</span>
+                        {% else %}
+                            <span class="badge badge-consumido">{{ pallet.estado }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:18px;">
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Fecha de ingreso</div>
+                    <div style="font-size:14px; font-weight:600; color:#2D2925; margin-top:2px;">{{ pallet.fecha_ingreso|fecha_chile }}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Ubicacion actual</div>
+                    <div style="font-size:14px; font-weight:600; color:#2D2925; margin-top:2px;">
+                        {% if pallet.rack %}
+                            {{ pallet.rack }} - {{ pallet.nivel }} - Pos {{ pallet.posicion }}
+                        {% else %}
+                            Sin ubicacion
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#5C564E;">Codigo QR</div>
+                    <div style="font-size:11px; color:#8C5A2A; margin-top:2px; word-break:break-all;">{{ pallet.codigo_qr[:16] }}...</div>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div style="margin-top:20px; display:flex; gap:8px; flex-wrap:wrap;">
+                <a href="{{ url_for('descargar_qr', id_pallet=pallet.id_pallet) }}" target="_blank"
+                   style="background-color:#2D2925; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600; font-size:13px;">
+                    Descargar QR
+                </a>
+                <a href="{{ url_for('historial_pallet', id_pallet=pallet.id_pallet) }}"
+                   style="background-color:#2c7be5; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600; font-size:13px;">
+                    Ver trazabilidad
+                </a>
+                {% if session.get('rol') == 'Administrador' %}
+                <a href="{{ url_for('editar_pallet', id_pallet=pallet.id_pallet) }}"
+                   style="background-color:#C77F3D; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600; font-size:13px;">
+                    Editar pallet
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Panel derecho: QR visible -->
+        <div style="flex:1; min-width:280px; background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:22px; box-shadow:0 1px 4px rgba(45,41,37,0.08); text-align:center;">
+            <h3 style="margin-top:0; font-family:'Poppins',sans-serif; font-size:16px;">Codigo QR</h3>
+            <p style="font-size:11px; color:#5C564E; margin:0 0 12px;">Escanealo para acceder al detalle desde el celular.</p>
+            <img src="{{ url_for('ver_qr_imagen', id_pallet=pallet.id_pallet) }}"
+                 alt="Codigo QR" style="width:200px; height:200px; max-width:100%;">
+        </div>
     </div>
 
-    <h3>Productos en este pallet</h3>
-    <table>
-        <tr>
-            <th>Producto</th>
-            <th>Cantidad</th>
-            <th>Fecha elaboracion</th>
-            <th>Fecha vencimiento</th>
-        </tr>
-        {% for item in items %}
-        <tr>
-            <td>{{ item.producto }}</td>
-            <td>{{ item.cantidad }}</td>
-            <td>{{ item.fecha_elaboracion or "-" }}</td>
-            <td>{{ item.fecha_vencimiento or "-" }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <!-- Productos en el pallet -->
+    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:22px; margin-bottom:20px;">
+        <h3 style="margin-top:0; font-family:'Poppins',sans-serif; font-size:16px;">Productos en este pallet</h3>
+        <div class="scroll-box">
+        <table>
+            <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Cant. original</th>
+                <th>Fecha elaboracion</th>
+                <th>Fecha vencimiento</th>
+            </tr>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.producto }}</td>
+                <td><strong>{{ item.cantidad }}</strong></td>
+                <td style="color:#5C564E;">{{ item.cantidad_original }}</td>
+                <td>{{ item.fecha_elaboracion|fecha_chile if item.fecha_elaboracion else "-" }}</td>
+                <td>{{ item.fecha_vencimiento|fecha_chile if item.fecha_vencimiento else "-" }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        </div>
+    </div>
 
-    <br>
-
+    <!-- Formulario despacho -->
     {% if pallet.estado != 'Consumido' %}
-    <div class="form-box" style="max-width:500px; margin-bottom:16px;">
-        <h3 style="margin-top:0;">Despachar / Mover pallet</h3>
+    <div style="background:var(--crema-card); border:1px solid var(--gris-borde); border-radius:12px; padding:22px; margin-bottom:20px; max-width:700px;">
+        <h3 style="margin-top:0; font-family:'Poppins',sans-serif; font-size:16px;">Despachar / Mover pallet</h3>
         <p style="font-size:12px; color:#5C564E; margin-top:0;">
             Deja la cantidad vacia para despachar el pallet completo.
             Si pones una cantidad y eliges una sala o planta, esas cajas SALEN de la bodega.
@@ -72,21 +134,5 @@
     </div>
     {% endif %}
 
-    <p>
-        <a href="{{ url_for('descargar_qr', id_pallet=pallet.id_pallet) }}" target="_blank"
-           style="background-color:#2D2925; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600; margin-right:8px;">
-            Descargar QR para imprimir
-        </a>
-        <a href="{{ url_for('historial_pallet', id_pallet=pallet.id_pallet) }}"
-           style="background-color:#2c7be5; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600; margin-right:8px;">
-            Ver trazabilidad
-        </a>
-        {% if session.get('rol') == 'Administrador' %}
-        <a href="{{ url_for('editar_pallet', id_pallet=pallet.id_pallet) }}"
-           style="background-color:#C77F3D; color:white; padding:8px 14px; border-radius:6px; text-decoration:none; font-weight:600;">
-            Editar pallet
-        </a>
-        {% endif %}
-    </p>
     <p><a href="{{ url_for('consulta_pallet') }}">Buscar otro pallet</a></p>
 {% endblock %}
